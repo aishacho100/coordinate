@@ -1,26 +1,18 @@
 # 進捗と再開メモ
 
-最終更新: Phase 2 完了直後(開発ビルドの動作確認だけ未了)。
+最終更新: Phase 2 完了・開発ビルドでの保存確認も完了。
 
 ## 現在地
 
 - Phase 1(基盤)完了、Phase 2(画像編集)完了。**次は Phase 3(AI アイテム検出)**。
-- Git: `git init` 済みだが**コミットはまだ無い**。再開時に、区切りとして最初のコミットをするか確認する。
+- Git: 最初のコミット済み(Phase 1-2)。
 - テスト: shared 3 / layout 41 / mobile 38、すべて成功。型検査・lint・`expo-doctor` もエラーなし。
 
-## 未完了の確認(再開時の最初の作業)
+## 開発ビルドでの保存確認(完了)
 
-**開発ビルドでの「端末に保存」の確認。** Expo Go ではネイティブ部分が無く保存できないため。
-
-```bash
-cd apps/mobile
-export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
-npx expo run:android --no-bundler     # Metro は別途 npx expo start で起動しておく
-```
-
-- 前回は Gradle ビルド中に中断した(初回は時間がかかる)。ビルド中に Gradle が Android SDK へ NDK 27.1.12297006 と Build-Tools 36 を自動導入した(ビルドに必要。完了・成否は未確認)。`apps/mobile/android/` は prebuild の生成物で Git 管理外。
-- 確認項目: 保存の権限ダイアログ → 保存成功 → 端末のギャラリーに画像がある → 拒否時のメッセージ。
-- 失敗した場合は `app.json` の `expo-media-library` プラグイン設定(`granularPermissions: []`)を疑う。
+- 開発ビルド(`expo run:android`)は成功。「端末に保存」で 1080×1350 の PNG が `DCIM/` に保存され、MediaStore で確認できた。
+- Android 10 以降は書き込み専用なら実行時権限が不要で、権限ダイアログは出ない(仕様どおり)。拒否時のメッセージはこの端末では到達しない。
+- 開発ビルドはエミュレータに導入済み。Metro は `npx expo start`、`adb reverse tcp:8081 tcp:8081` の後に `coordinate://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081` を開く。
 
 ## 環境の起動手順(エミュレータ)
 
@@ -32,6 +24,8 @@ cd apps/mobile && npx expo start --android
 ```
 
 - `-no-snapshot-save` を付けて終了すると Expo Go が消える。付けない。
+- Git Bash から `emulator.exe` を直接起動すると segfault する。PowerShell の `Start-Process` で起動する。
+- ビルド直後はエミュレータが極端に重く、画面が黒いまま数分かかることがある。スナップショット復元で黒画面が固定されたら `-no-snapshot-load` でコールドブートする。
 - 初回起動時は Expo Go の開発者メニューが画面を覆う。「Continue」→ 右上の × で閉じる。
 - アプリ内でのテスト写真は `/sdcard/Pictures/outfit_test.jpg`(合成画像。消えていたら再生成して `adb push`)。
 - Git Bash で `adb shell` に `/sdcard/...` を渡すときは `export MSYS_NO_PATHCONV=1` が必要。
