@@ -1,14 +1,14 @@
 # Phase 3 設計: AI アイテム検出と認識結果画面
 
-日付: 2026-10-15 / 状態: 設計承認済み(実装前)
+日付: 2026-10-15 / 状態: 設計承認済み(実装前)。商品特定の要件指示書を受けて、範囲を一部改訂(後述)。
 
 ## 目的と範囲
 
 コーデ写真 1 枚から着用アイテムを検出し、ユーザーが認識結果画面で確認・修正して編集画面へ進めるようにする。
 
-**含む**: `apps/api`(Fastify)、写真品質評価、Claude Vision による検出、テスト用ローカルカタログ、`analyzing` / `result` 画面、編集画面へのラベル受け渡し、実測とモデル比較の記録。
+**含む**: `apps/api`(Fastify)、写真品質評価、Claude Vision による検出、Claude のトークン数・処理時間の記録(費用管理の土台)、`analyzing` / `result` 画面、編集画面へのラベル受け渡し、実測とモデル比較の記録。
 
-**含まない**: 実カタログ(楽天 API 等)、価格取得、ユーザー訂正の記録と評価(Phase 5)、本格的なレート制限・SSRF 対策(Phase 6)、デプロイ。
+**含まない**: 商品特定(SerpApi・楽天)、価格・購入先 URL、テスト用ローカルカタログ、ユーザー訂正の記録と評価、DB・認証・プラン別上限、本格的なレート制限・SSRF 対策、デプロイ。後続フェーズは `docs/product-identification-requirements.md` の要件に沿って進める(下記「後続フェーズ」)。
 
 ## 決定事項
 
@@ -17,7 +17,8 @@
 - ブランドは、ロゴや文字が写真から読み取れた場合のみ出す。推測では出さず、読み取れなければ `unidentified`。
 - サーバーは画像を保存しない(メモリ上で処理して破棄、ログにも残さない)。
 - API キーは `apps/api/.env`(Git 管理外)のみ。アプリには入れない。
-- ダミー商品を実在商品として表示しない。モックの成功を AI 解析の成功として報告しない。
+- ダミー商品を表示しない。商品は実 API で根拠を確認できたときだけ出す(Phase 3 では商品を出さない)。モックの成功を AI 解析の成功として報告しない。
+- 確信度の数値を、実測された正解確率として表示しない。段階(`IdentificationLevel`)で扱う。
 
 ## 構成
 
@@ -25,8 +26,7 @@
 mobile ──POST /v1/analyze (multipart: 画像1枚)──▶ api
                                                   ├ 画像検証(JPEG/PNG、10MB 上限)
                                                   ├ 品質評価(sharp)
-                                                  ├ Detector(ClaudeVisionDetector)
-                                                  └ CatalogProvider(ローカル・「テスト用」表示)
+                                                  └ Detector(ClaudeVisionDetector) + 使用量の記録
 mobile ◀── JSON ─────────────────────────────────┘
 ```
 
@@ -36,8 +36,8 @@ mobile ◀── JSON ───────────────────�
 
 - `Detector`: `detect(image) → DetectedItem[]`。
 - `DetectedItem`: カテゴリ id(`DEFAULT_CATEGORIES`)、正規化座標 `Box`、色、読み取れたブランド文字列とその根拠、`Confidence`、`IdentificationLevel`。
-- `CatalogProvider`: `search(query) → Product[]`。実装はローカルのテスト用(`source: 'test'`、画面でも「テスト用」と表示)。
-- `Embedder` / `Reranker`: インターフェースのみ。実装は後続フェーズ。
+- `UsageRecord`: Claude の入力・出力トークン数、モデル名、処理時間。ログ(画像・キーを含まない)に出す。料金は設定値で、ソースに固定しない。
+- `CatalogProvider` / `Embedder` / `Reranker`: Phase 3 では作らない(Phase 4 で、実 API を使う実装とともに設計する)。
 - レスポンスの zod スキーマ(アプリとサーバーで共有)。
 
 ## API
@@ -49,6 +49,7 @@ mobile ◀── JSON ───────────────────�
   quality: { ok, issues: ('low_resolution'|'too_dark'|'blurry'|'not_full_body')[] },
   items: DetectedItem[],           // 空もありうる
   model: string,                   // 実際に使ったモデル名
+  usage: { inputTokens, outputTokens },
   timings: { quality, detect, total }  // ms
 }
 ```
@@ -85,7 +86,17 @@ mobile ◀── JSON ───────────────────�
 2. `apps/api` の土台(Fastify、環境変数、画像検証、ヘルスチェック)
 3. 品質評価(sharp)
 4. `ClaudeVisionDetector` とモデル切替
-5. ローカルのテスト用カタログ
+5. 使用量(トークン数・処理時間)の記録
 6. アプリ側の API クライアントと `analyzing` 画面
 7. `result` 画面と編集画面への受け渡し
 8. 実測とモデル比較の記録
+
+## 後続フェーズ(要件指示書の取り込み)
+
+`docs/product-identification-requirements.md` を要件として、次の順に進める。各フェーズの前に設計を承認する。
+
+| フェーズ | 内容 | 着手前に必要なこと |
+|---|---|---|
+| 4 | SerpApi・楽天による商品特定、候補と画像の照合、A/B/C の 3 段階判定、キャッシュ、検索回数の上限、価格の出典と取得日時 | 公式ドキュメント・料金・規約の調査と報告、SerpApi キー、楽天のアプリ登録とアフィリエイト設定 |
+| 5〜6 | DB(費用・キャッシュ・利用回数)、ユーザー認証、無料/有料プランの上限、月間予算の警告と停止、SSRF 対策、レート制限、プライバシーポリシーの設計 | DB の選定 |
+| 保留 | Google Cloud Vision(OCR・ロゴ検出) | Claude + SerpApi の実測後、追加費用と精度向上の見込みを比較して判断 |

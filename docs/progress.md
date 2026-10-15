@@ -34,7 +34,7 @@ cd apps/mobile && npx expo start --android
 
 - バックエンド: Fastify を `apps/api` に置く。デプロイはユーザーの承認後。
 - AI: Phase 3 は Anthropic の Vision API を `Detector` の実装の1つとして使う。キーは `apps/api/.env`(Git 管理外)。チャットに貼らない。ユーザーは API キーを取得済み。
-- 商品カタログ: `CatalogProvider` のインターフェースと、明示的に「テスト用」と表示するローカルカタログから始める。楽天 API 等の接続はキー用意後。
+- 商品特定は Phase 4 で、SerpApi と楽天市場 API を使って行う。要件は `docs/product-identification-requirements.md`。Phase 3 では商品を出さない(テスト用ローカルカタログは作らない)。Phase 4 の前に、公式ドキュメント・料金・規約の調査と報告、SerpApi キー、楽天のアプリ登録が必要。
 - ダミー商品を実在商品として表示しない。モックの成功を実際の AI 解析の成功として報告しない。
 - デザイン: 温かいオフホワイト+インク色。見出しは明朝(Shippori Mincho)、本文はゴシック(Zen Kaku Gothic New)、欧文は Cormorant Garamond、手書きは Klee One。ボタンは最大幅 280px の中央配置(全幅にしない)。ユーザーはこの見た目を承認済み。
 
@@ -53,7 +53,11 @@ cd apps/mobile && npx expo start --android
 - 下書き保存、最近作成した画像の一覧は未実装。
 - 実写真での見た目の確認が未了(合成画像のみ)。
 
-## Phase 3 の着手前に決めること
+## Phase 3 の設計(承認済み)
+
+`docs/superpowers/specs/2026-10-15-phase3-detection-design.md` を参照。次は実装計画(writing-plans)の作成。
+
+## (旧)Phase 3 の着手前に決めること(設計で解決済み)
 
 1. `apps/api` の構成(Fastify、zod、環境変数の読み込み、レート制限の入口)
 2. `Detector` / `Embedder` / `CatalogProvider` / `Reranker` のインターフェース(`packages/shared` に型を追加)
