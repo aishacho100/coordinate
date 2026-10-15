@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+.DS_Store
+
+# Expo prebuild の生成物(ネイティブプロジェクト)
+apps/mobile/android/
+apps/mobile/ios/
