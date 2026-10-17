@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+
 import { checkerJpeg, flatJpeg } from '../test-utils';
 import { assessQuality } from './quality';
 
@@ -21,6 +23,17 @@ describe('assessQuality', () => {
 
   it('のっぺりした画像は blurry', async () => {
     const r = await assessQuality(await flatJpeg(1000, 1000, 128));
+    expect(r.issues).toContain('blurry');
+    expect(r.issues).not.toContain('too_dark');
+  });
+
+  it('濃淡の幅が大きくてもエッジが無ければ blurry(入力の輝度のばらつきではなく、エッジの強さで判定する)', async () => {
+    const w = 1000;
+    const h = 1000;
+    const raw = Buffer.alloc(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) raw[y * w + x] = Math.round((x / (w - 1)) * 255);
+    const gradient = await sharp(raw, { raw: { width: w, height: h, channels: 1 } }).jpeg({ quality: 95 }).toBuffer();
+    const r = await assessQuality(gradient);
     expect(r.issues).toContain('blurry');
     expect(r.issues).not.toContain('too_dark');
   });
