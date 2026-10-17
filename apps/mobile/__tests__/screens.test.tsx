@@ -9,7 +9,7 @@ import ResultScreen from '@/app/result';
 import SettingsScreen from '@/app/settings';
 import { AnalysisProvider } from '@/features/analysis/analysis-context';
 import type { AnalysisState } from '@/features/analysis/analysis-reducer';
-import { EditorProvider } from '@/features/editor/editor-context';
+import { EditorProvider, useEditor } from '@/features/editor/editor-context';
 import { editorReducer, initialEditorState } from '@/features/editor/reducer';
 import { AnalyzeError } from '@/lib/analyze-api';
 
@@ -161,10 +161,28 @@ describe('認識結果画面', () => {
     expect(screen.getByText('帽子')).toBeTruthy();
   });
 
-  it('編集へ進むと検出結果が 1 回だけラベルとして渡される', () => {
-    renderResult(doneState());
+  it('編集へ進むと検出結果が 1 回だけラベルとして渡される(戻って再度押しても増えない)', () => {
+    let labels: { itemId: string | null; brand: string; name: string }[] = [];
+    function Probe() {
+      labels = useEditor().snapshot?.doc.labels ?? [];
+      return null;
+    }
+    render(
+      <EditorProvider initialState={loadedEditor}>
+        <AnalysisProvider initialState={doneState()}>
+          <ResultScreen />
+          <Probe />
+        </AnalysisProvider>
+      </EditorProvider>,
+    );
     fireEvent.press(screen.getByLabelText('この内容で編集へ'));
     expect(mockPush).toHaveBeenCalledWith('/editor');
+    expect(labels.map((l) => [l.itemId, l.brand, l.name])).toEqual([
+      ['a', 'NIKE', 'Tシャツ'],
+      ['b', '', 'スニーカー'],
+    ]);
+    fireEvent.press(screen.getByLabelText('この内容で編集へ'));
+    expect(labels).toHaveLength(2);
   });
 
   it('解析結果が無ければホームへ戻る導線を出す', () => {
