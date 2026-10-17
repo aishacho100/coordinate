@@ -159,6 +159,21 @@ describe('document', () => {
     expect(EditDocumentSchema.safeParse(next).success).toBe(true);
   });
 
+  it('anchor と position を指定でき、0〜1 に丸められる', () => {
+    const d = addLabel(base, {
+      id: 'p',
+      anchor: { x: 0.3, y: 1.4 },
+      position: { x: 0.05, y: 0.2 },
+    });
+    expect(d.labels[0]?.anchor).toEqual({ x: 0.3, y: 1 });
+    expect(d.labels[0]?.position).toEqual({ x: 0.05, y: 0.2 });
+  });
+
+  it('指定が無ければ従来どおり既定の配置になる', () => {
+    const d = addLabel(base, { id: 'q' });
+    expect(d.labels[0]?.position).toEqual({ x: 0.05, y: 0.1 });
+  });
+
   it('ID重複は拒否する', () => {
     const d = addLabel(base, { id: 'a' });
     expect(() => addLabel(d, { id: 'a' })).toThrow();

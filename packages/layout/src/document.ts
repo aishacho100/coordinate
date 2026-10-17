@@ -36,6 +36,9 @@ export type NewLabelInput = {
   brand?: string;
   name?: string;
   price?: string;
+  /** 省略時は defaultSlot。指定時は 0〜1 に丸める。 */
+  anchor?: Point;
+  position?: Point;
 };
 
 export function addLabel(doc: EditDocument, input: NewLabelInput): EditDocument {
@@ -44,8 +47,8 @@ export function addLabel(doc: EditDocument, input: NewLabelInput): EditDocument 
   const label: Label = {
     id: input.id,
     itemId: input.itemId ?? null,
-    anchor: slot.anchor,
-    position: slot.position,
+    anchor: input.anchor ? clampPoint(input.anchor) : slot.anchor,
+    position: input.position ? clampPoint(input.position) : slot.position,
     brand: input.brand ?? '',
     name: input.name ?? '',
     price: input.price ?? '',
