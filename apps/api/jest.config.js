@@ -6,7 +6,7 @@ module.exports = {
   // fastify の light-my-request が使う cookie@2 は ESM のみのため、ts-jest で CommonJS に変換する。
   transformIgnorePatterns: ['/node_modules/(?!cookie/)'],
   transform: {
-    '^.+\.[tj]s$': [
+    '^.+\\.[tj]s$': [
       'ts-jest',
       {
         tsconfig: {
