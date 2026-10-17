@@ -20,8 +20,15 @@ type EditorContextValue = {
 
 const EditorContext = createContext<EditorContextValue | null>(null);
 
-export function EditorProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(editorReducer, initialEditorState);
+export function EditorProvider({
+  children,
+  initialState = initialEditorState,
+}: {
+  children: ReactNode;
+  /** テスト用。 */
+  initialState?: EditorState;
+}) {
+  const [state, dispatch] = useReducer(editorReducer, initialState);
   const value = useMemo<EditorContextValue>(
     () => ({ state, dispatch, snapshot: state.history?.present ?? null, ...selectUndoRedo(state) }),
     [state],
