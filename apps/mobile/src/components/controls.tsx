@@ -8,16 +8,19 @@ export function Chip({
   label,
   selected,
   onPress,
+  accessibilityLabel,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
+  /** 表示名だけでは対象が分からないとき(例: 「削除」)の読み上げ名。省略時は label。 */
+  accessibilityLabel?: string;
 }) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ selected }}
       onPress={onPress}
       style={[

@@ -8,6 +8,7 @@ import HomeScreen from '@/app/index';
 import ResultScreen from '@/app/result';
 import SettingsScreen from '@/app/settings';
 import { AnalysisProvider } from '@/features/analysis/analysis-context';
+import type { AnalysisState } from '@/features/analysis/analysis-reducer';
 import { EditorProvider } from '@/features/editor/editor-context';
 import { editorReducer, initialEditorState } from '@/features/editor/reducer';
 import { AnalyzeError } from '@/lib/analyze-api';
@@ -98,11 +99,77 @@ describe('写真が無い状態', () => {
   });
 });
 
-describe('認識結果画面(骨組み)', () => {
-  // Task 12 で置き換える
-  it('未実装であることを明示する', () => {
-    render(<ResultScreen />);
-    expect(screen.getByText('未実装(Phase 3 で実装予定)')).toBeTruthy();
+describe('認識結果画面', () => {
+  const doneState = (over: Partial<Extract<AnalysisState, { status: 'done' }>> = {}): AnalysisState => ({
+    status: 'done',
+    items: [
+      { id: 'a', categoryId: 'tshirt', brand: 'NIKE', box: { x: 0.2, y: 0.2, w: 0.3, h: 0.3 }, origin: 'ai', level: 'medium' },
+      { id: 'b', categoryId: 'sneakers', brand: '', box: { x: 0.4, y: 0.8, w: 0.2, h: 0.15 }, origin: 'ai', level: 'unidentified' },
+    ],
+    quality: { ok: true, issues: [] },
+    timings: { quality: 120, detect: 4200, total: 4400 },
+    model: 'claude-sonnet-5-5',
+    applied: false,
+    ...over,
+  });
+
+  const renderResult = (state: AnalysisState) =>
+    render(
+      <EditorProvider initialState={loadedEditor}>
+        <AnalysisProvider initialState={state}>
+          <ResultScreen />
+        </AnalysisProvider>
+      </EditorProvider>,
+    );
+
+  it('検出したアイテムをカテゴリ・ブランドで一覧し、ブランド未検出は「ブランド不明」と出す', () => {
+    renderResult(doneState());
+    expect(screen.getByText('Tシャツ')).toBeTruthy();
+    expect(screen.getByDisplayValue('NIKE')).toBeTruthy();
+    expect(screen.getByText('スニーカー')).toBeTruthy();
+    expect(screen.getByText('ブランド不明')).toBeTruthy();
+    expect(screen.queryByText(/¥|円/)).toBeNull(); // Phase 3 では価格を出さない
+  });
+
+  it('品質の助言を表示する', () => {
+    renderResult(doneState({ quality: { ok: false, issues: ['blurry', 'not_full_body'] } }));
+    expect(screen.getByText(/ぼやけ/)).toBeTruthy();
+    expect(screen.getByText(/全身/)).toBeTruthy();
+  });
+
+  it('ブランドを手入力でき、削除できる', () => {
+    renderResult(doneState());
+    fireEvent.changeText(screen.getByLabelText('スニーカーのブランド'), 'adidas');
+    expect(screen.getByDisplayValue('adidas')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Tシャツを削除'));
+    expect(screen.queryByText('Tシャツ')).toBeNull();
+  });
+
+  it('カテゴリを変更できる', () => {
+    renderResult(doneState());
+    fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+    fireEvent.press(screen.getByLabelText('ニット'));
+    expect(screen.getByText('ニット')).toBeTruthy();
+    expect(screen.queryByText('Tシャツ')).toBeNull();
+  });
+
+  it('検出 0 件でも手動で追加できる', () => {
+    renderResult(doneState({ items: [] }));
+    expect(screen.getByText('アイテムを見つけられませんでした')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('アイテムを追加'));
+    fireEvent.press(screen.getByLabelText('帽子'));
+    expect(screen.getByText('帽子')).toBeTruthy();
+  });
+
+  it('編集へ進むと検出結果が 1 回だけラベルとして渡される', () => {
+    renderResult(doneState());
+    fireEvent.press(screen.getByLabelText('この内容で編集へ'));
+    expect(mockPush).toHaveBeenCalledWith('/editor');
+  });
+
+  it('解析結果が無ければホームへ戻る導線を出す', () => {
+    render(withPhoto(<ResultScreen />));
+    expect(screen.getByText('認識結果がありません。')).toBeTruthy();
   });
 });
 
