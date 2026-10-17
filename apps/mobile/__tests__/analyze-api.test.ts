@@ -1,5 +1,15 @@
 import { AnalyzeError, analyzePhoto, ERROR_MESSAGES } from '@/lib/analyze-api';
 
+jest.mock('expo-file-system', () => ({
+  File: class MockFile {
+    uri: string;
+    constructor(mockUri: string) {
+      this.uri = mockUri;
+    }
+  },
+}));
+const { File: MockFile } = jest.requireMock<{ File: new (uri: string) => { uri: string } }>('expo-file-system');
+
 const okBody = {
   quality: { ok: true, issues: [] },
   items: [],
@@ -20,6 +30,16 @@ describe('analyzePhoto', () => {
     expect(res.model).toBe('claude-sonnet-5-5');
     expect(f.mock.calls[0]?.[0]).toBe('http://api.test/v1/analyze');
     expect(f.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+  });
+
+  it('写真は expo-file-system の File(Blob 互換)として添付する(グローバル fetch は {uri} 形式を受け付けない)', async () => {
+    const append = jest.spyOn(FormData.prototype, 'append');
+    const f = jest.fn().mockResolvedValue(json(200, okBody));
+    await analyzePhoto('file:///a.jpg', opts(f));
+    const call = append.mock.calls.find(([name]) => name === 'image');
+    expect(call?.[1]).toBeInstanceOf(MockFile);
+    expect((call?.[1] as unknown as { uri: string }).uri).toBe('file:///a.jpg');
+    append.mockRestore();
   });
 
   it.each([

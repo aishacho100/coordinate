@@ -1,4 +1,5 @@
 import { AnalyzeResponseSchema, ApiErrorSchema, type AnalyzeResponse, type ApiErrorCode } from '@coordinate/shared';
+import { File } from 'expo-file-system';
 
 export type AnalyzeErrorKind = ApiErrorCode | 'network';
 
@@ -28,8 +29,10 @@ export async function analyzePhoto(uri: string, options: Options = {}): Promise<
   const doFetch = options.fetchImpl ?? fetch;
 
   const form = new FormData();
-  // React Native の FormData はファイル URI をそのまま添付できる。
-  form.append('image', { uri, name: 'photo.jpg', type: 'image/jpeg' } as unknown as Blob);
+  // Expo ではグローバル fetch が expo/fetch に置き換わっており、React Native 形式の
+  // { uri, name, type } は「Unsupported FormDataPart implementation」で失敗する。
+  // Blob を実装する expo-file-system の File を添付する。
+  form.append('image', new File(uri));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 90_000);
