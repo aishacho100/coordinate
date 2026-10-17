@@ -82,6 +82,40 @@ describe('normalizeDetection', () => {
     expect(normalizeDetection(out([r]), 'm').items[0]?.level).toBe('unidentified');
   });
 
+  it.each([
+    ['The North Face', 'THE'],
+    ['New Balance', 'NEW'],
+    ['Polo Ralph Lauren', 'POLO'],
+    ['Adidas', 'AS'],
+    ['ON', 'SEASON'],
+    ['GU', 'GUESS'],
+    ['Gap', 'GAPS'],
+    ['Champion', 'Champions League'],
+  ])('文字の断片や別の単語に埋もれた一致は根拠にしない: %s / %s', (brand, text) => {
+    const r = raw({ brand, visible_text: [text], brand_confidence: 0.9 });
+    expect(normalizeDetection(out([r]), 'm').items[0]?.level).toBe('unidentified');
+  });
+
+  it.each([
+    ['NIKE', 'NIKE JUST DO IT'],
+    ['New Balance', 'NewBalance'],
+    ['New Balance', 'new-balance 574'],
+    ["Levi's", 'LEVIS'],
+    ['UNIQLO', 'UNIQLO U'],
+    ['GU', 'GU'],
+  ])('ブランド全体が語として読み取れていれば根拠にする: %s / %s', (brand, text) => {
+    const r = raw({ brand, visible_text: [text], brand_confidence: 0.9 });
+    expect(normalizeDetection(out([r]), 'm').items[0]?.level).toBe('medium');
+  });
+
+  it('ブランドの信頼度が範囲外ならブランドだけ捨て、項目は残す', () => {
+    const r = raw({ brand: 'NIKE', visible_text: ['NIKE'], brand_confidence: 5 });
+    const { items } = normalizeDetection(out([r]), 'm');
+    expect(items).toHaveLength(1);
+    expect(items[0]?.level).toBe('unidentified');
+    expect(items[0]?.brandCandidates).toEqual([]);
+  });
+
   it('ID は採用した項目に連番で振る', () => {
     const { items } = normalizeDetection(out([raw({ category_id: 'x' }), raw(), raw()]), 'm');
     expect(items.map((i) => i.id)).toEqual(['item_1', 'item_2']);

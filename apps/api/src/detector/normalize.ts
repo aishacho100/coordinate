@@ -7,18 +7,29 @@ const EPS = 1e-6;
 
 const unit = (v: number) => Number.isFinite(v) && v >= 0 && v <= 1;
 
-function norm(s: string): string {
-  return s.normalize('NFKC').toLowerCase().replace(/[\s\-_.'’・]/g, '');
+/** 比較用に正規化する。アポストロフィは除き、それ以外の記号・空白は単語の区切り(半角スペース 1 つ)にする。 */
+function words(s: string): string {
+  return s
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
 }
 
-/** ブランドと一致する、写真内の読み取り文字を返す。1 文字だけの一致は根拠にしない。 */
+/**
+ * ブランドが、写真内の読み取り文字の中に「語として丸ごと」現れていれば、その文字を返す。
+ * 文字の断片(THE → The North Face)や別の単語に埋もれた一致(ON → SEASON)は根拠にしない。
+ * 空白の有無の違い(NewBalance ↔ New Balance)は同じとみなす。
+ */
 function findEvidence(brand: string, visibleText: string[]): string | null {
-  const b = norm(brand);
-  if (b.length < 2) return null;
+  const b = words(brand);
+  const bCompact = b.replace(/ /g, '');
+  if (bCompact.length < 2) return null;
   for (const t of visibleText) {
-    const n = norm(t);
-    if (n.length < 2) continue;
-    if (n.includes(b) || b.includes(n)) return t;
+    const w = words(t);
+    if (w === '') continue;
+    if (` ${w} `.includes(` ${b} `) || w.replace(/ /g, '') === bCompact) return t;
   }
   return null;
 }
@@ -30,8 +41,9 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
   if (!unit(r.detection_confidence) || !unit(r.category_confidence)) return null;
 
   const brandText = r.brand?.trim() ?? '';
-  const evidence = brandText ? findEvidence(brandText, r.visible_text) : null;
-  const brandScore = unit(r.brand_confidence) ? r.brand_confidence : 0;
+  // 信頼度が範囲外のブランドは採用しない(項目自体は残す)。
+  const evidence = brandText && unit(r.brand_confidence) ? findEvidence(brandText, r.visible_text) : null;
+  const brandScore = r.brand_confidence;
   const hasBrand = evidence !== null;
 
   return {
