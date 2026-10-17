@@ -55,7 +55,7 @@ cd apps/mobile && npx expo start --android
 
 ## Phase 3 の設計(承認済み)
 
-`docs/superpowers/specs/2026-10-15-phase3-detection-design.md` を参照。次は実装計画(writing-plans)の作成。
+設計: `docs/superpowers/specs/2026-10-15-phase3-detection-design.md`。実装計画: `docs/superpowers/plans/2026-10-17-phase3-detection.md`(全13タスク、作成済み)。次は計画の実行。Sonnet 5.5 は `tool_choice` 強制が使えないため、検出はツール呼び出しではなく構造化出力で行う。
 
 ## (旧)Phase 3 の着手前に決めること(設計で解決済み)
 
