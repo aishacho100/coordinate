@@ -43,6 +43,8 @@ export type EditorAction =
   | { type: 'setAspect'; aspect: EditDocument['aspect'] }
   | { type: 'setShowPrices'; showPrices: boolean }
   | { type: 'addLabel'; input: NewLabelInput }
+  /** 複数ラベルを 1 回の履歴で追加する(AI の検出結果の引き継ぎ用)。 */
+  | { type: 'addLabels'; inputs: NewLabelInput[] }
   | { type: 'removeLabel'; id: string }
   | { type: 'resetLayout' }
   | { type: 'resetStyles' }
@@ -107,6 +109,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case 'addLabel': {
       const doc = addLabel(cur.doc, action.input);
       return { history: pushHistory(h, withDoc(cur, doc)), selectedId: action.input.id };
+    }
+    case 'addLabels': {
+      if (action.inputs.length === 0) return state;
+      const doc = action.inputs.reduce(addLabel, cur.doc);
+      return { ...state, history: pushHistory(h, withDoc(cur, doc)) };
     }
     case 'removeLabel': {
       const doc = removeLabel(cur.doc, action.id);

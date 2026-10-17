@@ -3,18 +3,18 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
-import { NotImplemented } from '@/components/not-implemented';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useAnalysis } from '@/features/analysis/analysis-context';
 import { useEditor } from '@/features/editor/editor-context';
 import { pickPhoto } from '@/features/editor/photo-io';
 import { useTheme } from '@/hooks/use-theme';
 
 const STEPS = [
   ['01', '写真を選ぶ'],
-  ['02', 'AIがアイテムを検出・商品候補を提示(準備中)'],
-  ['03', '確認・修正'],
+  ['02', 'AIがアイテムを検出'],
+  ['03', '結果を確認・修正'],
   ['04', '編集して書き出し・共有'],
 ] as const;
 
@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { snapshot, dispatch } = useEditor();
+  const { dispatch: analysisDispatch } = useAnalysis();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,8 +32,9 @@ export default function HomeScreen() {
     try {
       const photo = await pickPhoto();
       if (photo) {
+        analysisDispatch({ type: 'reset' });
         dispatch({ type: 'loadPhoto', photo });
-        router.push('/editor');
+        router.push('/analyzing');
       }
     } catch {
       setError('写真を読み込めませんでした。別の写真でお試しください。');
@@ -52,11 +54,6 @@ export default function HomeScreen() {
           服・靴・バッグ・アクセサリーのブランド名や価格を添えた、投稿用の1枚に仕上げます。
         </ThemedText>
       </View>
-
-      <NotImplemented
-        phase={3}
-        description="AIによるアイテム自動認識・商品特定は準備中です。現在は、ラベルを手動で入力して配置できます。"
-      />
 
       {error ? (
         <ThemedText type="small" accessibilityRole="alert" style={{ color: '#C0392B' }}>

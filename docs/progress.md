@@ -1,12 +1,12 @@
 # 進捗と再開メモ
 
-最終更新: Phase 2 完了・開発ビルドでの保存確認も完了。
+最終更新: Phase 3 完了(エミュレータで実際の Claude を呼んだ通し確認まで)。
 
 ## 現在地
 
-- Phase 1(基盤)完了、Phase 2(画像編集)完了。**次は Phase 3(AI アイテム検出)**。
-- Git: 最初のコミット済み(Phase 1-2)。
-- テスト: shared 3 / layout 41 / mobile 38、すべて成功。型検査・lint・`expo-doctor` もエラーなし。
+- Phase 1(基盤)、Phase 2(画像編集)、Phase 3(AI アイテム検出)完了。**次は Phase 4(商品特定)**。着手前に必要なことは下の「次: Phase 4」を参照。
+- Git: Phase 3 はブランチ `phase3-detection` で作業(main へは未マージ)。
+- テスト: api 62 / mobile 73 / layout 43 / shared 7、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
 
 ## 開発ビルドでの保存確認(完了)
 
@@ -46,6 +46,10 @@ cd apps/mobile && npx expo start --android
 - `expo-media-library` は Expo Go に無いので、`require` の前に `requireOptionalNativeModule` で確認している(`export-image.ts`)。
 - jest-expo では動的 `import()` が使えない。
 - ジェスチャーのコールバックで ref を読むと lint(react-hooks/refs)に落ちる。ドラッグは差分アクションで reducer に渡す方式。
+- Expo SDK 57 ではグローバル `fetch` が `expo/fetch`。`FormData` にファイルを入れるときは React Native 形式の `{ uri, name, type }` ではなく、`expo-file-system` の `File` を使う(`analyze-api.ts`)。
+- Windows の Git Bash で `timeout` を使ってサーバーを起動すると、子プロセス(node)が残ることがある。止めるときはポート(`netstat -ano | grep :8787`)から PID を特定して `taskkill` する。
+- `apps/api` の jest: fastify の light-my-request が使う `cookie@2` が ESM のみのため、`transformIgnorePatterns` で `cookie` を変換対象に含めている(`apps/api/jest.config.js`)。
+- `sharp` の `stats()` は処理前の入力画像を測る。加工後の値が必要なら、いったん `toBuffer()` してから新しい `sharp` で `stats()` する(ぼけ判定の不具合の原因だった)。
 
 ## Phase 2 で見えている改善点(Phase 7 で対応予定)
 
@@ -53,9 +57,63 @@ cd apps/mobile && npx expo start --android
 - 下書き保存、最近作成した画像の一覧は未実装。
 - 実写真での見た目の確認が未了(合成画像のみ)。
 
-## Phase 3 の設計(承認済み)
+## Phase 3(AI アイテム検出)の結果
 
-設計: `docs/superpowers/specs/2026-10-15-phase3-detection-design.md`。実装計画: `docs/superpowers/plans/2026-10-17-phase3-detection.md`(全13タスク、作成済み)。次は計画の実行。Sonnet 5.5 は `tool_choice` 強制が使えないため、検出はツール呼び出しではなく構造化出力で行う。
+設計: `docs/superpowers/specs/2026-10-15-phase3-detection-design.md`。実装計画: `docs/superpowers/plans/2026-10-17-phase3-detection.md`(全13タスク、実装済み)。Sonnet 5.5 は `tool_choice` 強制が使えないため、検出はツール呼び出しではなく構造化出力で行う。
+
+### モデル比較と確定モデル
+
+詳細は `docs/phase3-model-comparison.md`。写真 10 枚での実測の要約:
+
+- Sonnet 5.5: 平均約 4.3 秒、1 写真あたり概算約 $0.013。最も安定。
+- Haiku 5.5: 平均約 6.5 秒、概算約 $0.001。両足の靴を 1 つの枠にまとめた例あり。出力トークンが多く Sonnet より遅い。
+- Opus 5.5(5 枚のみ): 平均約 8.7 秒、概算約 $0.029。人が多い写真で粗いカテゴリを選び、ジーンズを見落とした。
+- 推測によるブランドの誤採用は全モデル・全写真でゼロ。
+- **既定モデルは Sonnet 5.5(`claude-sonnet-5-5`)に確定**。`apps/api/.env` の `ANTHROPIC_MODEL` で変更できる。
+
+### エミュレータでの確認(実際に Claude を呼んだ結果)
+
+2026-10-17、Pixel_7_API_35 の開発ビルド + ローカルの `apps/api`(Sonnet 5.5)で実施。
+
+- ホーム →「写真を選ぶ」→ 端末内の写真(Nike の赤いパーカーの夜景写真)→「解析しています」→ 認識結果、まで通った。API ログ上の所要は約 7.3 秒(検出 5.2 秒、品質確認 0.8 秒。画面にも表示)。
+- 検出は 3 件(パーカー・パンツ・T シャツ)。枠の位置は写真上の各アイテムとおおむね一致。パーカーのブランドは「Nike」(「写真内の文字から読み取りました」と表示)、他は「ブランド不明」。品質の助言は「暗い写真です」「全身が写っていないようです」が表示された。
+- adidas のスニーカーの写真では、デニムとスニーカーの 2 件を検出し、スニーカーのブランドは「adidas」(文字から読み取り)。所要は検出 4.1 秒。
+- 認識結果画面で、カテゴリ変更(T シャツ → シャツ)、ブランド入力(「入力した内容です」に変わる)、削除、「アイテムを追加」がそれぞれ動いた。
+- 「この内容で編集へ」で、ラベルが対応するアイテムの近くに 3 件付いた(手動追加したアイテムは位置情報がないため写真の中央付近)。戻って再度進んでもラベルは 3 件のままで、二重にならなかった。
+- 書き出し →「端末に保存」で 1080×1350 の PNG が `DCIM/` に保存された。
+- 失敗系: API サーバーを止めて写真を選ぶと「解析できませんでした」「通信できませんでした。…」と「もう一度試す」「手動で編集する」「ホームに戻る」が表示された。「手動で編集する」で編集画面へ進めた。API を再起動した後は、再び解析できた。
+- **見つかった不具合(修正済み)**: Expo SDK 57 ではグローバル `fetch` が `expo/fetch` に置き換わっており、React Native 形式の `{ uri, name, type }` を `FormData` に入れると「Unsupported FormDataPart implementation」で送信前に失敗していた(画面上は「通信できませんでした」)。jest ではモックの fetch を使うため検出できなかった。`expo-file-system` の `File`(Blob 互換)を添付する方式に変えて解決。
+- 気づいた点(未対応): 認識結果画面で Android の戻るキーを押すと、確認なしでホームに戻り、結果画面での修正が失われる。
+- 未確認: iOS、実機、複数人が写る写真のアプリ上での見え方。
+
+### モックでのテスト(実際の Claude は呼ばない)
+
+- api: Claude の応答はモックの Anthropic クライアントで再現(検出結果の検証、ブランドの根拠判定、エラー応答、品質評価など)。
+- mobile: 解析 API クライアントは `fetch` を注入してテスト。画面のテストは `analyze-api` をモックしている。ここでの成功は実際の AI 解析の成功を意味しない。
+
+### API サーバーの起動手順(ローカル)
+
+```bash
+# apps/api/.env に ANTHROPIC_API_KEY を書く(Git 管理外。チャットに貼らない)
+# 任意: ANTHROPIC_MODEL(既定 claude-sonnet-5-5)、ANTHROPIC_EFFORT(既定 medium)、PORT(既定 8787)、
+#       RATE_LIMIT_PER_MINUTE(既定 20)、PRICE_INPUT_PER_MTOK / PRICE_OUTPUT_PER_MTOK(費用の概算をログに出す)
+npm start -w api          # http://localhost:8787 。/health で確認
+# apps/mobile/.env に EXPO_PUBLIC_API_BASE_URL を書く(Git 管理外)
+#   Android エミュレータからは http://10.0.2.2:8787(エミュレータから見たホスト PC)
+# Metro は起動時にしか .env を読まないので、書き換えたら Metro を再起動する
+```
+
+評価スクリプト: `npm run eval -w api`(写真は `apps/api/eval/photos/`、Git 管理外)。
+
+## 次: Phase 4(商品特定)
+
+着手前に必要なこと(いずれも未着手):
+
+1. SerpApi・楽天市場 API の公式ドキュメント・料金・利用規約の調査と、ユーザーへの報告
+2. SerpApi の API キーの取得(ユーザー)
+3. 楽天のアプリ登録とアフィリエイト設定(ユーザー)
+
+要件は `docs/product-identification-requirements.md`。
 
 ## (旧)Phase 3 の着手前に決めること(設計で解決済み)
 

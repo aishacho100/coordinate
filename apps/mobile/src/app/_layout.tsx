@@ -18,6 +18,7 @@ import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors, Fonts } from '@/constants/theme';
+import { AnalysisProvider } from '@/features/analysis/analysis-context';
 import { EditorProvider } from '@/features/editor/editor-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -59,25 +60,27 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <EditorProvider>
-      <ThemeProvider value={navTheme}>
-        <StatusBar style="auto" />
-        <Stack
-          screenOptions={{
-            headerShadowVisible: false,
-            headerTitleAlign: 'center',
-            headerTitleStyle: { fontFamily: Fonts.serif, fontSize: 17, color: colors.text },
-            headerBackButtonDisplayMode: 'minimal',
-            headerTintColor: colors.text,
-            contentStyle: { backgroundColor: colors.background },
-          }}>
-          <Stack.Screen name="index" options={{ title: 'COORDINATE' }} />
-          <Stack.Screen name="analyzing" options={{ title: 'AI解析中' }} />
-          <Stack.Screen name="result" options={{ title: '認識結果' }} />
-          <Stack.Screen name="editor" options={{ title: '画像編集' }} />
-          <Stack.Screen name="export" options={{ title: '書き出し' }} />
-          <Stack.Screen name="settings" options={{ title: '設定・プライバシー' }} />
-        </Stack>
-      </ThemeProvider>
+        <AnalysisProvider>
+        <ThemeProvider value={navTheme}>
+          <StatusBar style="auto" />
+          <Stack
+            screenOptions={{
+              headerShadowVisible: false,
+              headerTitleAlign: 'center',
+              headerTitleStyle: { fontFamily: Fonts.serif, fontSize: 17, color: colors.text },
+              headerBackButtonDisplayMode: 'minimal',
+              headerTintColor: colors.text,
+              contentStyle: { backgroundColor: colors.background },
+            }}>
+            <Stack.Screen name="index" options={{ title: 'COORDINATE' }} />
+            <Stack.Screen name="analyzing" options={{ title: 'AI解析中' }} />
+            <Stack.Screen name="result" options={{ title: '認識結果' }} />
+            <Stack.Screen name="editor" options={{ title: '画像編集' }} />
+            <Stack.Screen name="export" options={{ title: '書き出し' }} />
+            <Stack.Screen name="settings" options={{ title: '設定・プライバシー' }} />
+          </Stack>
+        </ThemeProvider>
+        </AnalysisProvider>
       </EditorProvider>
     </GestureHandlerRootView>
   );

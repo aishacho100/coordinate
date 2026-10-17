@@ -14,3 +14,6 @@ build/
 # Expo prebuild の生成物(ネイティブプロジェクト)
 apps/mobile/android/
 apps/mobile/ios/
+
+# 実 Claude の評価用(手元の写真と結果。コミットしない)
+apps/api/eval/
