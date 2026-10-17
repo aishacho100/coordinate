@@ -163,4 +163,28 @@ describe('editorReducer', () => {
   it('clear で状態が空に戻る', () => {
     expect(run([{ type: 'loadPhoto', photo }, { type: 'clear' }])).toEqual(initialEditorState);
   });
+
+  it('addLabels は複数ラベルを 1 回の履歴で追加し、元に戻すと一度に消える', () => {
+    const s0 = run([{ type: 'loadPhoto', photo }]);
+    const s1 = run(
+      [
+        {
+          type: 'addLabels',
+          inputs: [
+            { id: 'a', itemId: 'i1', name: 'Tシャツ', anchor: { x: 0.3, y: 0.3 }, position: { x: 0.05, y: 0.2 } },
+            { id: 'b', itemId: 'i2', name: '帽子' },
+          ],
+        },
+      ],
+      s0,
+    );
+    expect(doc(s1).labels.map((l) => l.id)).toEqual(['a', 'b']);
+    expect(doc(s1).labels[0]?.anchor).toEqual({ x: 0.3, y: 0.3 });
+    expect(doc(run([{ type: 'undo' }], s1)).labels).toHaveLength(0);
+  });
+
+  it('addLabels に空配列を渡しても履歴は増えない', () => {
+    const s0 = run([{ type: 'loadPhoto', photo }]);
+    expect(run([{ type: 'addLabels', inputs: [] }], s0)).toBe(s0);
+  });
 });
