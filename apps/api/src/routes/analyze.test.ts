@@ -2,7 +2,7 @@ import { AnalyzeResponseSchema } from '@coordinate/shared';
 
 import { buildApp } from '../app';
 import { loadConfig } from '../config';
-import { checkerJpeg, fakeDetector, multipartBody } from '../test-utils';
+import { checkerJpeg, fakeDetector, flatPng, multipartBody } from '../test-utils';
 
 const config = loadConfig({});
 
@@ -103,6 +103,71 @@ describe('POST /v1/analyze', () => {
     const third = await post(app, img);
     expect(third.statusCode).toBe(429);
     expect(third.json().error).toBe('rate_limited');
+    await app.close();
+  });
+
+  it('入力画素数の上限を超える画像は 400 invalid_image で、検出器を呼ばない', async () => {
+    const detector = fakeDetector();
+    const app = buildApp({ config, detector });
+    // 上限(40_000_000 画素)を超える最小に近い寸法。単色 PNG なので小さい。
+    const res = await post(app, await flatPng(6500, 6500, 128), { filename: 'big.png', contentType: 'image/png' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_image');
+    expect(detector.calls).toBe(0);
+    await app.close();
+  });
+
+  describe('multipart の上限', () => {
+    // 有効な JPEG を使う(壊れた画像による 400 と区別するため)。
+    function rawMultipart(parts: (string | Buffer)[], boundary = '----lim') {
+      const chunks: Buffer[] = [];
+      for (const p of parts) chunks.push(Buffer.from(`--${boundary}\r\n`), Buffer.from(p), Buffer.from('\r\n'));
+      chunks.push(Buffer.from(`--${boundary}--\r\n`));
+      return { payload: Buffer.concat(chunks), headers: { 'content-type': `multipart/form-data; boundary=${boundary}` } };
+    }
+    const filePart = (name: string, jpeg: Buffer) =>
+      Buffer.concat([
+        Buffer.from(`Content-Disposition: form-data; name="${name}"; filename="a.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+        jpeg,
+      ]);
+    const fieldPart = (name: string) => `Content-Disposition: form-data; name="${name}"\r\n\r\nv`;
+
+    it('余計なフィールドを持つ multipart は 400(500 にしない)', async () => {
+      const detector = fakeDetector();
+      const app = buildApp({ config, detector });
+      const { payload, headers } = rawMultipart([fieldPart('extra'), filePart('image', await checkerJpeg())]);
+      const res = await app.inject({ method: 'POST', url: '/v1/analyze', payload, headers });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('invalid_image');
+      expect(detector.calls).toBe(0);
+      await app.close();
+    });
+
+    it('パートが多すぎる multipart は 400(500 にしない)', async () => {
+      const detector = fakeDetector();
+      const app = buildApp({ config, detector });
+      const jpeg = await checkerJpeg();
+      const { payload, headers } = rawMultipart([filePart('image', jpeg), filePart('b', jpeg), filePart('c', jpeg)]);
+      const res = await app.inject({ method: 'POST', url: '/v1/analyze', payload, headers });
+      expect(res.statusCode).toBe(400);
+      expect(detector.calls).toBe(0);
+      await app.close();
+    });
+
+    it('正常な 1 ファイルの multipart は 200', async () => {
+      const app = buildApp({ config, detector: fakeDetector() });
+      expect((await post(app, await checkerJpeg())).statusCode).toBe(200);
+      await app.close();
+    });
+  });
+
+  it('応答の組み立てが検証に失敗したら 502 analysis_failed(内容は返さない)', async () => {
+    const detector = fakeDetector({ usage: { inputTokens: -5, outputTokens: 1 }, model: 'secret-model-name' });
+    const app = buildApp({ config, detector });
+    const res = await post(app, await checkerJpeg());
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error).toBe('analysis_failed');
+    expect(res.body).not.toContain('secret-model-name');
     await app.close();
   });
 });

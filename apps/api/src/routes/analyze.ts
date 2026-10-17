@@ -26,24 +26,22 @@ export function registerAnalyzeRoute(app: FastifyInstance, deps: AppDeps) {
   app.post('/v1/analyze', { config: { rateLimit: {} } }, async (req, reply) => {
     const t0 = performance.now();
 
-    let file;
+    // req.file() は最初のファイルで返るため、後続のパートや上限超過(fields/parts)に気づけない。
+    // 全パートを読み切り、ファイル 1 つだけの multipart だけを受け付ける。
+    let data: Buffer | undefined;
     try {
-      file = await req.file();
-    } catch {
-      return sendError(reply, 400, 'invalid_image');
-    }
-    if (!file) return sendError(reply, 400, 'invalid_image');
-
-    let data: Buffer;
-    try {
-      data = await file.toBuffer();
+      for await (const part of req.parts()) {
+        if (part.type !== 'file' || data) return sendError(reply, 400, 'invalid_image');
+        data = await part.toBuffer();
+        if (part.file.truncated) return sendError(reply, 400, 'too_large');
+      }
     } catch (e) {
       const code = (e as { code?: string }).code;
       return code === 'FST_REQ_FILE_TOO_LARGE'
         ? sendError(reply, 400, 'too_large')
         : sendError(reply, 400, 'invalid_image');
     }
-    if (file.file.truncated) return sendError(reply, 400, 'too_large');
+    if (!data) return sendError(reply, 400, 'invalid_image');
 
     // 画像検証は他の処理より前に行う。
     if (!validateImage(data).ok) return sendError(reply, 400, 'invalid_image');
@@ -66,7 +64,7 @@ export function registerAnalyzeRoute(app: FastifyInstance, deps: AppDeps) {
       result = await deps.detector.detect(prepared);
     } catch (e) {
       // 画像・キー・上流の詳細はログに残さない。種類だけ記録する。
-      req.log.error({ errorName: (e as Error).name, status: (e as { status?: number }).status }, 'detect failed');
+      req.log.error({ errorName: e instanceof Error ? e.name : 'unknown', status: (e as { status?: number }).status }, 'detect failed');
       return sendError(reply, 502, 'analysis_failed');
     }
     const detectMs = performance.now() - td;
@@ -88,7 +86,7 @@ export function registerAnalyzeRoute(app: FastifyInstance, deps: AppDeps) {
       'analyzed',
     );
 
-    const body = AnalyzeResponseSchema.parse({
+    const parsed = AnalyzeResponseSchema.safeParse({
       quality: { ok: issues.length === 0, issues },
       items: result.items,
       model: result.model,
@@ -99,6 +97,11 @@ export function registerAnalyzeRoute(app: FastifyInstance, deps: AppDeps) {
         total: Math.round(performance.now() - t0),
       },
     });
-    return reply.send(body);
+    if (!parsed.success) {
+      // zod の内容(モデル出力を含みうる)は応答にもログにも出さない。種類だけ記録する。
+      req.log.error({ errorName: 'ResponseSchemaMismatch' }, 'response validation failed');
+      return sendError(reply, 502, 'analysis_failed');
+    }
+    return reply.send(parsed.data);
   });
 }

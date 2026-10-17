@@ -2,6 +2,8 @@ import sharp from 'sharp';
 
 import type { QualityIssue } from '@coordinate/shared';
 
+import { MAX_INPUT_PIXELS } from './limits';
+
 /** 初期値。実写真で調整する(docs/phase3-model-comparison.md に結果を残す)。 */
 export const THRESHOLDS = {
   /** 短辺がこれ未満なら解像度不足(px)。 */
@@ -18,14 +20,14 @@ export type QualityAssessment = { issues: QualityIssue[]; width: number; height:
 
 /** 解像度・明るさ・ぶれを評価する。全身が写っているかは検出結果から別に判定する。 */
 export async function assessQuality(data: Uint8Array): Promise<QualityAssessment> {
-  const meta = await sharp(data).rotate().metadata();
+  const meta = await sharp(data, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().metadata();
   // rotate() は EXIF の向きを反映する。メタデータの幅・高さは回転前なので、向きに応じて入れ替える。
   const swapped = (meta.orientation ?? 1) >= 5;
   const width = (swapped ? meta.height : meta.width) ?? 0;
   const height = (swapped ? meta.width : meta.height) ?? 0;
   if (width === 0 || height === 0) throw new Error('画像サイズを取得できません');
 
-  const { data: gray, info } = await sharp(data)
+  const { data: gray, info } = await sharp(data, { limitInputPixels: MAX_INPUT_PIXELS })
     .rotate()
     .resize({ width: ANALYSIS_SIDE, height: ANALYSIS_SIDE, fit: 'inside', withoutEnlargement: true })
     .greyscale()

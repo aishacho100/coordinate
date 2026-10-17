@@ -17,7 +17,7 @@ export type AppDeps = {
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: deps.logger ?? false });
 
-  app.register(multipart, { limits: { fileSize: deps.config.maxImageBytes, files: 1 } });
+  app.register(multipart, { limits: { fileSize: deps.config.maxImageBytes, files: 1, fields: 0, parts: 2 } });
   app.register(rateLimit, {
     global: false,
     max: deps.config.ratePerMinute,
