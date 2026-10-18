@@ -90,9 +90,10 @@ describe('ProductCandidates', () => {
     const noPrice: IdentifyCandidate = { ...rakuten, product: { ...rakuten.product, productId: 'r2', price: undefined } };
     render(<ProductCandidates response={response({ candidates: [google, rakuten, noPrice] })} />);
     expect(screen.getByText('¥16,500')).toBeTruthy();
-    expect(screen.getByText('Google ショッピングの表示価格 ・ 10月18日時点')).toBeTruthy();
+    expect(screen.getByText('Google ショッピングの表示価格')).toBeTruthy();
     expect(screen.getByText('¥7,590')).toBeTruthy();
-    expect(screen.getByText('楽天市場の販売価格 ・ 10月18日時点')).toBeTruthy();
+    expect(screen.getByText('楽天市場の販売価格')).toBeTruthy();
+    expect(screen.getAllByText('10月18日時点')).toHaveLength(2);
     expect(screen.getByText('価格は取得できませんでした')).toBeTruthy();
     expect(screen.getByText('ABC-MART')).toBeTruthy();
   });
@@ -102,21 +103,61 @@ describe('ProductCandidates', () => {
     expect(screen.queryByText(/0\.62|62%|0\.5/)).toBeNull();
   });
 
-  it('Google の商品ページは「Google ショッピングで見る(販売元: ○○)」、楽天は「楽天市場で見る」。押すと開く', () => {
+  it('Google の商品ページは「Google ショッピングで見る」(販売元は別の行)、楽天は「楽天市場で見る」。押すと開く', () => {
     render(<ProductCandidates response={response()} />);
-    const g = screen.getByRole('link', { name: 'Google ショッピングで見る(販売元: ABC-MART)' });
+    const g = screen.getByRole('link', { name: 'Google ショッピングで見る' });
     fireEvent.press(g);
     expect(openURL).toHaveBeenCalledWith(google.product.pageUrl);
     fireEvent.press(screen.getByRole('link', { name: '楽天市場で見る' }));
     expect(openURL).toHaveBeenCalledWith(rakuten.product.pageUrl);
   });
 
-  it('販売元が無ければ「(販売元: …)」を付けず、pageUrl が無ければリンクを出さない', () => {
+  it('販売元が無ければ販売元の行を出さず、pageUrl が無ければリンクを出さない', () => {
     const bare: IdentifyCandidate = { ...google, product: { ...google.product, seller: undefined } };
     const noUrl: IdentifyCandidate = { ...rakuten, product: { ...rakuten.product, productId: 'r3', pageUrl: undefined } };
     render(<ProductCandidates response={response({ candidates: [bare, noUrl] })} />);
     expect(screen.getByRole('link', { name: 'Google ショッピングで見る' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: '楽天市場で見る' })).toBeNull();
+    expect(screen.queryByText('ABC-MART')).toBeNull();
+  });
+
+  it('長い販売元名でもリンクの文言は短いままで、販売元は別の行に 1 行で省略して出す', () => {
+    const longSeller = '楽天市場 - ブランド古着の買取販売ベクトル スペシャルストア';
+    const long: IdentifyCandidate = { ...google, product: { ...google.product, seller: longSeller } };
+    render(<ProductCandidates response={response({ candidates: [long] })} />);
+    expect(screen.getByRole('link', { name: 'Google ショッピングで見る' })).toBeTruthy();
+    expect(screen.queryByText(/販売元:/)).toBeNull();
+    const seller = screen.getByText(longSeller);
+    expect(seller.props.numberOfLines).toBe(1);
+    expect(seller.props.ellipsizeMode).toBe('tail');
+  });
+
+  it('Lens の販売元が 20 文字を超えるときは「商品ページを見る」にして、販売元は別の行に出す', () => {
+    const longSeller = 'あ'.repeat(21);
+    const lens: IdentifyCandidate = {
+      ...google,
+      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: longSeller },
+    };
+    const exactly20: IdentifyCandidate = {
+      ...lens,
+      product: { ...lens.product, productId: 'l2', seller: 'い'.repeat(20) },
+    };
+    render(<ProductCandidates response={response({ candidates: [lens, exactly20] })} />);
+    expect(screen.getByRole('link', { name: '商品ページを見る' })).toBeTruthy();
+    expect(screen.getByText(longSeller).props.numberOfLines).toBe(1);
+    expect(screen.getByRole('link', { name: `${'い'.repeat(20)}で見る` })).toBeTruthy();
+  });
+
+  it('商品名は 2 行までで省略する', () => {
+    render(<ProductCandidates response={response({ candidates: [google] })} />);
+    expect(screen.getByText('NIKE Air Force 1 ホワイト').props.numberOfLines).toBe(2);
+  });
+
+  it('「10月18日時点」は価格の種別とは別の行で、1 行にして途中で折り返さない', () => {
+    render(<ProductCandidates response={response({ candidates: [google] })} />);
+    const asOf = screen.getByText('10月18日時点');
+    expect(asOf.props.numberOfLines).toBe(1);
+    expect(screen.queryByText(/表示価格 ・/)).toBeNull();
   });
 
   it('Google Lens の候補は「{販売元}で見る」、販売元が無ければ「商品ページを見る」', () => {

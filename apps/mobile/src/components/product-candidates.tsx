@@ -31,6 +31,9 @@ const PRICE_LABEL: Record<string, string> = {
   google_shopping: 'Google ショッピングの表示価格',
 };
 
+/** Lens の販売元がこれより長いときは、リンクに入れず別の行に出す。 */
+const LONG_SELLER_LENGTH = 20;
+
 const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
 
 /** 商品特定の結果。確信度の数値は出さない(並び順は API 側で済んでいる)。 */
@@ -93,15 +96,17 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
   const price = product.price;
   const priceLabel = PRICE_LABEL[product.source];
   const asOf = price ? formatAsOf(price.fetchedAt) : '';
-  const priceNote = [priceLabel, asOf].filter(Boolean).join(' ・ ');
+  // Lens は販売元をリンク文言に使う。長いときは文言を短くし、販売元は別の行に回す。
+  const lensSellerInLink =
+    product.source === 'google_lens' && !!product.seller && product.seller.length <= LONG_SELLER_LENGTH;
 
   const linkLabel =
     product.source === 'google_shopping'
-      ? `Google ショッピングで見る${product.seller ? `(販売元: ${product.seller})` : ''}`
+      ? 'Google ショッピングで見る'
       : product.source === 'rakuten'
         ? '楽天市場で見る'
         : product.source === 'google_lens'
-          ? product.seller
+          ? lensSellerInLink
             ? `${product.seller}で見る`
             : '商品ページを見る'
           : null;
@@ -117,15 +122,20 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
         />
       ) : null}
       <View style={styles.body}>
-        <ThemedText type="default" style={styles.productName}>
+        <ThemedText type="default" style={styles.productName} numberOfLines={2} ellipsizeMode="tail">
           {product.name}
         </ThemedText>
         {price ? (
           <View>
             <ThemedText type="subtitle">{formatPrice(price.amount, price.currency)}</ThemedText>
-            {priceNote ? (
+            {priceLabel ? (
               <ThemedText type="small" themeColor="textSecondary">
-                {priceNote}
+                {priceLabel}
+              </ThemedText>
+            ) : null}
+            {asOf ? (
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {asOf}
               </ThemedText>
             ) : null}
           </View>
@@ -134,8 +144,8 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             価格は取得できませんでした
           </ThemedText>
         )}
-        {product.seller ? (
-          <ThemedText type="small" themeColor="textSecondary">
+        {product.seller && !lensSellerInLink ? (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="tail">
             {product.seller}
           </ThemedText>
         ) : null}
