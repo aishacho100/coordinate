@@ -1,8 +1,13 @@
 import { isAllowedImageUrl } from './image-url';
 
 describe('isAllowedImageUrl', () => {
-  it('Google のサムネイルと楽天の画像だけを許可する', () => {
-    expect(isAllowedImageUrl('https://encrypted-tbn0.gstatic.com/shopping?q=tbn:abc')).toBe(true);
+  it('SerpApi の /images/url/ と楽天の画像だけを許可する', () => {
+    expect(isAllowedImageUrl('https://serpapi.com/images/url/abc123.webp')).toBe(true);
+    expect(isAllowedImageUrl('https://serpapi.com/search.json?x=1')).toBe(false);
+    expect(isAllowedImageUrl('https://serpapi.com/images/other/a.webp')).toBe(false);
+    expect(isAllowedImageUrl('https://serpapi.com/images/urlx/a.webp')).toBe(false);
+    expect(isAllowedImageUrl('http://serpapi.com/images/url/a.webp')).toBe(false);
+    expect(isAllowedImageUrl('https://encrypted-tbn0.gstatic.com/shopping?q=tbn:abc')).toBe(false);
     expect(isAllowedImageUrl('https://thumbnail.image.rakuten.co.jp/@0_mall/a/b.jpg?_ex=128x128')).toBe(true);
   });
   it('http・他のドメイン・内部アドレス・不正な URL は拒否する', () => {
