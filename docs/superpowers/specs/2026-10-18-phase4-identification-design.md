@@ -67,7 +67,7 @@
 
 - キーはサーバーの `.env` のみ(`SERPAPI_API_KEY`、`RAKUTEN_APPLICATION_ID`、`RAKUTEN_ACCESS_KEY`、`RAKUTEN_AFFILIATE_ID`)。ログには、キー・画像・検索語の全文を出さない(種類と回数だけ)。
 - 楽天の `accessKey` はクエリパラメータで渡す(実測で確認済み。`Authorization: Bearer` は 400 だった)。
-- 外部の URL(候補のサムネイル)を取得する場合は、https のみ、許可ドメインのみ、サイズと時間の上限つき、リダイレクト無しとする。Claude に URL を直接渡せる場合は、サーバーでは取得しない。どちらかは実装時に確認する。
+- 外部の URL(候補のサムネイル)を取得する場合は、https のみ、許可ドメインのみ、サイズと時間の上限つき、リダイレクト無しとする。Claude に URL は渡さない(Google のサムネイルは Anthropic 側の取得が robots.txt で拒否されるため)。サーバーが取得し、base64 で渡す。画像は SerpApi の `serpapi_thumbnail`(serpapi.com/images/url/)と楽天のサムネイルに限る。
 - キーが未設定の検索は使わず、結果に「未設定」と返す。アプリ全体は落とさない。
 - 楽天のアフィリエイト ID が未設定なら、アフィリエイトなしのリンクを使い、収益化されないことを記録する。
 
@@ -97,5 +97,5 @@
 
 - SerpApi のデータの商用利用・保存の条件(SerpApi への問い合わせが必要)。
 - 楽天の想定 QPS の上限と、料金が発生する条件。
-- Shopping 結果のサムネイルの形式(Claude に URL で渡せるか、データ URL か)。
+- 〔確認済み〕Shopping 結果のサムネイルの形式: `thumbnail`(gstatic)は Claude に URL で渡せない。`serpapi_thumbnail`(WebP)をサーバーが取得して base64 で渡す。
 - 文字が読めない服は、ほとんど B か C になる見込み。精度を測ってから、基準を調整する。

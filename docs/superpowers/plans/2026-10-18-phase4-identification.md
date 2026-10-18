@@ -17,7 +17,7 @@
 
 ## 実 API で確認済みの事実
 
-- SerpApi `engine=google_shopping&gl=jp&hl=ja&q=...&json_restrictor=shopping_results`。結果は `shopping_results[]` で、`title`、`product_id`、`product_link`、`source`、`price`("￥16,500")、`extracted_price`(16500)、`thumbnail`(`https://encrypted-tbn0.gstatic.com/shopping?q=tbn:...`)。`link` は無い。
+- SerpApi `engine=google_shopping&gl=jp&hl=ja&q=...&json_restrictor=shopping_results`。結果は `shopping_results[]` で、`title`、`product_id`、`product_link`、`source`、`price`("￥16,500")、`extracted_price`(16500)、`thumbnail`(`https://encrypted-tbn0.gstatic.com/shopping?q=tbn:...`)、`serpapi_thumbnail`(`https://serpapi.com/images/url/...`、WebP 約 9KB)。`link` は無い。**実 API で確認した事実(実装後に更新)**: gstatic のサムネイルは Anthropic 側の取得が robots.txt で拒否され(400 invalid_request_error)、1 枚でも混ざるとリクエスト全体が失敗する。このため画像は `serpapi_thumbnail` を使い、Claude に URL は渡さず、サーバーが取得して base64 で渡す。楽天の画像は URL 渡しでも通るが、経路を一つにするためサーバー取得に統一した。
 - 楽天 `GET https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701?applicationId=..&accessKey=..&affiliateId=..&keyword=..&hits=..&format=json`。**`accessKey` はクエリで渡す**(`Authorization: Bearer` は 400)。応答は `{ count, Items: [{ Item: { itemName, itemCode, itemPrice, itemUrl, shopName, mediumImageUrls: [{ imageUrl }], availability, ... } }] }`。`affiliateId` を付けると `itemUrl` がアフィリエイト URL になる。画像 URL は `https://thumbnail.image.rakuten.co.jp/...?_ex=128x128`。
 
 ## ファイル構成
@@ -31,7 +31,8 @@ apps/api/src/usage/usage-store.ts          (新規) 使用量(JSON ファイル)
 apps/api/src/search/types.ts               (新規) 検索の共通型
 apps/api/src/search/serpapi.ts             (新規)
 apps/api/src/search/rakuten.ts             (新規)
-apps/api/src/search/image-url.ts           (新規) サムネイルの許可ドメイン
+apps/api/src/search/image-url.ts           (新規) 画像の許可 URL(楽天のサムネイルと serpapi.com/images/url/。gstatic は不可)
+apps/api/src/search/fetch-image.ts         (新規) 候補画像のサーバー取得(https・許可 URL のみ・リダイレクト無し・5 秒・512KB 上限)
 apps/api/src/identify/query-generator.ts   (新規) Claude: 検索語
 apps/api/src/identify/comparer.ts          (新規) Claude: 照合
 apps/api/src/identify/verdict.ts           (新規) 判定ルール(純関数)
@@ -2611,4 +2612,4 @@ USAGE_FILE=data/usage.json
 
 **名前の整合**: `IdentifyResponse`、`IdentifyCandidate`、`Judgement`、`decideVerdict`、`SearchOutcome`/`ProductSearcher`、`Identifier`、`SearchUnavailableError`、`FileUsageStore`/`UsageStore`、`TtlCache`、`isAllowedImageUrl` を全 Task で同じ綴りで使っている。`ProductSchema` への `seller` 追加は Task 5 の注記にあるが、Task 1 で一緒に入れること(Task 1 のステップ 3 に `seller: z.string().optional()` を加える)。
 
-**既知のリスク(実装時に確認)**: (1) `req.parts(options)` の `limits` の効き方(Task 10)。(2) Anthropic SDK の URL 画像ソースの型(Task 8)。(3) `expo-file-system` の `File`/`Paths` の API(Task 11)。(4) Anthropic が候補のサムネイル URL を取得できない場合は、照合が失敗として `comparison: 'failed'` になる(Task 9 で扱い済み)。実 API の評価(Task 13)で頻度を測る。
+**既知のリスク(実装時に確認)**: (1) `req.parts(options)` の `limits` の効き方(Task 10)。(2) Anthropic SDK の URL 画像ソースの型(Task 8)。(3) `expo-file-system` の `File`/`Paths` の API(Task 11)。(4) 〔解消済み〕候補の画像を Claude に URL のまま渡すと、gstatic が robots.txt で拒否され照合全体が失敗した。実装は、サーバーが `serpapi_thumbnail` と楽天の画像を取得し、base64 で渡す方式に変更済み(取得できない候補は「画像なし」として sameProduct を false に固定)。Task 8 の `source: { type: 'url', ... }` の記述は、この方式に読み替える。
