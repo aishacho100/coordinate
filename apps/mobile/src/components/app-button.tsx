@@ -34,7 +34,7 @@ export function AppButton({ label, accessibilityLabel, onPress, variant = 'prima
       ]}>
       <ThemedText
         type="smallBold"
-        style={[styles.label, { color: primary ? '#0F0E0D' : theme.text }]}>
+        style={[styles.label, { color: primary ? theme.onAccent : theme.text }]}>
         {label}
       </ThemedText>
     </Pressable>

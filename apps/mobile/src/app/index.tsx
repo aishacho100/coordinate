@@ -113,5 +113,5 @@ const styles = StyleSheet.create({
   bottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', gap: Spacing.three },
   actions: { alignItems: 'center', justifyContent: 'center' },
   resume: { position: 'absolute', left: '50%', marginLeft: MAIN_SIZE / 2 + Spacing.three },
-  error: { color: '#D98B7E', textAlign: 'center', paddingHorizontal: Spacing.four },
+  error: { color: Colors.error, textAlign: 'center', paddingHorizontal: Spacing.four },
 });

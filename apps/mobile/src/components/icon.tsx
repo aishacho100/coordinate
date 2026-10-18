@@ -1,4 +1,7 @@
+import { View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+
+import { Colors } from '@/constants/theme';
 
 export type IconName =
   | 'plus'
@@ -24,22 +27,26 @@ type Props = {
   strokeWidth?: number;
 };
 
-/** 極細の線アイコン。装飾なので読み上げからは外す(名前は親のボタンが持つ)。 */
-export function Icon({ name, size = 24, color = '#F4F1EC', strokeWidth = 1.2 }: Props) {
+/**
+ * 極細の線アイコン。装飾なので読み上げからは外す(名前は親のボタンが持つ)。
+ * 読み上げ除外は View の aria-hidden で行う。Svg に importantForAccessibility などを直接渡すと、
+ * Web で DOM に漏れて「React does not recognize the `importantForAccessibility` prop」の警告が出る。
+ */
+export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.2 }: Props) {
   return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={color}
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants">
-      {shape(name)}
-    </Svg>
+    <View aria-hidden style={{ width: size, height: size }}>
+      <Svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round">
+        {shape(name)}
+      </Svg>
+    </View>
   );
 }
 

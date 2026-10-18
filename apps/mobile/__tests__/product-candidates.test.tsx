@@ -68,20 +68,20 @@ describe('ProductCandidates', () => {
     expect(screen.getByText('特定できました')).toBeTruthy();
     expect(screen.getByText('一致した点: 色、ロゴ')).toBeTruthy();
     expect(screen.getByText('確認できていない点: 型番')).toBeTruthy();
-    expect(screen.queryByText(/同じ商品とは確認できていません/)).toBeNull();
+    expect(screen.queryByText(/断定はできません/)).toBeNull();
   });
 
-  it('B: 「候補が見つかりました」と、同じ商品とは確認できていない旨を書く', () => {
+  it('B: 「候補が見つかりました」と、同じ商品とは断定できない旨を書く', () => {
     render(<ProductCandidates response={response()} />);
     expect(screen.getByText('候補が見つかりました')).toBeTruthy();
-    expect(screen.getByText('似ている商品です。同じ商品とは確認できていません。')).toBeTruthy();
+    expect(screen.getByText('似ている商品です。同じ商品と断定はできません。')).toBeTruthy();
   });
 
   it('C: 「特定できませんでした」と書き、候補は出さない', () => {
     render(<ProductCandidates response={response({ verdict: 'unidentified', candidates: [] })} />);
     expect(screen.getByText('特定できませんでした')).toBeTruthy();
     expect(
-      screen.getByText('写真から読み取れる手がかりが足りず、商品名やブランドは決められませんでした。'),
+      screen.getByText('手がかりが足りず、商品名やブランドを決められませんでした。'),
     ).toBeTruthy();
     expect(screen.queryByText(/で見る/)).toBeNull();
   });
@@ -96,6 +96,13 @@ describe('ProductCandidates', () => {
     expect(screen.getAllByText('10月18日時点')).toHaveLength(2);
     expect(screen.getByText('価格は取得できませんでした')).toBeTruthy();
     expect(screen.getByText('ABC-MART')).toBeTruthy();
+  });
+
+  it('一致の印は、写真と同じ(identical)と似ている(similar)で読み上げ名が分かれる', () => {
+    const same: IdentifyCandidate = { ...google, matchType: 'identical' };
+    render(<ProductCandidates response={response({ verdict: 'identified', candidates: [same, rakuten] })} />);
+    expect(screen.getAllByLabelText('写真と同じ')).toHaveLength(1);
+    expect(screen.getAllByLabelText('似ている')).toHaveLength(1);
   });
 
   it('確信度の数値は出さない', () => {

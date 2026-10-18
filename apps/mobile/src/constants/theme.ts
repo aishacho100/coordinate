@@ -12,6 +12,10 @@ export const Colors = {
   textSecondary: '#9B9388',
   border: '#2B2926',
   accent: '#C9B38A',
+  /** 金の上に載せる文字・アイコンの色。 */
+  onAccent: '#0F0E0D',
+  error: '#D98B7E',
+  success: '#9CBFA5',
 } as const;
 
 export type ThemeColor = keyof typeof Colors;

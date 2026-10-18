@@ -17,7 +17,7 @@ type Props = {
 export function ImageSearchConsentCard({ onGrant, onDecline }: Props) {
   const theme = useTheme();
   return (
-    <View style={[styles.wrap, { borderColor: theme.border }]}>
+    <View style={[styles.wrap, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="eyebrow" themeColor="textSecondary">
         Image search
       </ThemedText>
@@ -33,7 +33,12 @@ export function ImageSearchConsentCard({ onGrant, onDecline }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.two, paddingTop: Spacing.three, borderTopWidth: StyleSheet.hairlineWidth * 2 },
-  body: { lineHeight: 22 },
+  wrap: {
+    gap: Spacing.two,
+    padding: Spacing.three,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  body: { lineHeight: 22, fontSize: 12.5 },
   buttons: { gap: Spacing.two, paddingTop: Spacing.two },
 });

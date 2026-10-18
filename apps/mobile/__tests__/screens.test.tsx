@@ -176,10 +176,15 @@ describe('認識結果画面', () => {
 
   it('検出したアイテムをカテゴリ・ブランドで一覧し、ブランド未検出は「ブランド不明」と出す', () => {
     renderResult(doneState());
+    // 先頭のアイテムが選ばれていて、下にカテゴリとブランドを出す。ブランドは写真の上のタグにも出る。
     expect(screen.getByText('Tシャツ')).toBeTruthy();
-    expect(screen.getByDisplayValue('NIKE')).toBeTruthy();
+    expect(screen.getAllByText('NIKE').length).toBeGreaterThan(0);
+    expect(screen.queryByText('ブランド不明')).toBeNull();
+    // 切り抜きのサムネイルで選び直す。
+    fireEvent.press(screen.getByLabelText('スニーカーを選ぶ'));
     expect(screen.getByText('スニーカー')).toBeTruthy();
     expect(screen.getByText('ブランド不明')).toBeTruthy();
+    expect(screen.getByLabelText('スニーカーを選ぶ').props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.queryByText(/¥|円/)).toBeNull(); // Phase 3 では価格を出さない
   });
 
@@ -191,15 +196,19 @@ describe('認識結果画面', () => {
 
   it('ブランドを手入力でき、削除できる', () => {
     renderResult(doneState());
+    fireEvent.press(screen.getByLabelText('スニーカーを選ぶ'));
+    fireEvent.press(screen.getByLabelText('スニーカーを編集'));
     fireEvent.changeText(screen.getByLabelText('スニーカーのブランド'), 'adidas');
     expect(screen.getByDisplayValue('adidas')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Tシャツを削除'));
-    expect(screen.queryByText('Tシャツ')).toBeNull();
+    fireEvent.press(screen.getByLabelText('スニーカーを削除'));
+    expect(screen.queryByLabelText('スニーカーを選ぶ')).toBeNull();
+    // 削除すると先頭のアイテムが選ばれる。
+    expect(screen.getByText('Tシャツ')).toBeTruthy();
   });
 
   it('カテゴリを変更できる', () => {
     renderResult(doneState());
-    fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+    fireEvent.press(screen.getByLabelText('Tシャツを編集'));
     fireEvent.press(screen.getByLabelText('ニット'));
     expect(screen.getByText('ニット')).toBeTruthy();
     expect(screen.queryByText('Tシャツ')).toBeNull();
@@ -321,7 +330,7 @@ describe('認識結果画面', () => {
     it('カテゴリを変えたあとは、変更後のカテゴリで探す', async () => {
       mockIdentifyItem.mockResolvedValue(identified);
       renderResult(aiState());
-      fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+      fireEvent.press(screen.getByLabelText('Tシャツを編集'));
       fireEvent.press(screen.getByLabelText('ニット'));
       fireEvent.press(screen.getByLabelText('ニットの商品を探す'));
       await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalled());
@@ -390,6 +399,7 @@ describe('認識結果画面', () => {
         expect(screen.getByText(/SerpApi が送った画像を保持する期間は公表されていません。/)).toBeTruthy();
         expect(screen.getByLabelText('画像を送らずに探す')).toBeTruthy();
         expect(screen.queryByLabelText('Tシャツの商品を探す')).toBeNull();
+        fireEvent.press(screen.getByLabelText('帽子を選ぶ'));
         expect(screen.getByLabelText('帽子の商品を探す')).toBeTruthy();
         expect(mockIdentifyItem).not.toHaveBeenCalled();
         expect(mockCropItem).not.toHaveBeenCalled();
@@ -434,14 +444,16 @@ describe('認識結果画面', () => {
         renderResult(twoAiState());
         fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
         await screen.findByLabelText('同意して探す');
+        fireEvent.press(screen.getByLabelText('帽子を選ぶ'));
         fireEvent.press(screen.getByLabelText('帽子の商品を探す'));
-        await waitFor(() => expect(screen.getAllByLabelText('同意して探す')).toHaveLength(2));
+        await screen.findByLabelText('同意して探す');
 
-        fireEvent.press(screen.getAllByLabelText('同意して探す')[0]!);
+        fireEvent.press(screen.getByLabelText('同意して探す'));
         await screen.findByText('候補が見つかりました');
-        // 選ぶと、もう一方のカードは閉じて「商品を探す」に戻り、押せば同意ありで即検索する。
+        // 選ぶと、もう一方のアイテムの同意のカードも閉じて「商品を探す」に戻り、押せば同意ありで即検索する。
+        fireEvent.press(screen.getByLabelText('Tシャツを選ぶ'));
         expect(screen.queryByLabelText('同意して探す')).toBeNull();
-        fireEvent.press(screen.getByLabelText('帽子の商品を探す'));
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
         await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledTimes(2));
         expect(mockIdentifyItem.mock.calls[1]?.[2]).toEqual({ imageSearchConsent: true });
       });
@@ -472,12 +484,19 @@ describe('認識結果画面', () => {
     });
 
     it.each([
-      ['ブランドの入力', () => fireEvent.changeText(screen.getByLabelText('スニーカーのブランド'), 'adidas')],
+      [
+        'ブランドの入力',
+        () => {
+          fireEvent.press(screen.getByLabelText('スニーカーを選ぶ'));
+          fireEvent.press(screen.getByLabelText('スニーカーを編集'));
+          fireEvent.changeText(screen.getByLabelText('スニーカーのブランド'), 'adidas');
+        },
+      ],
       ['削除', () => fireEvent.press(screen.getByLabelText('Tシャツを削除'))],
       [
         'カテゴリの変更',
         () => {
-          fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+          fireEvent.press(screen.getByLabelText('Tシャツを編集'));
           fireEvent.press(screen.getByLabelText('ニット'));
         },
       ],

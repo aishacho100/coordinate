@@ -103,7 +103,7 @@ export default function EditorScreen() {
             onValueChange={(v) => dispatch({ type: 'setShowPrices', showPrices: v })}
           />
           {error ? (
-            <ThemedText type="small" accessibilityRole="alert" style={{ color: '#C0392B' }}>
+            <ThemedText type="small" accessibilityRole="alert" themeColor="error">
               {error}
             </ThemedText>
           ) : null}

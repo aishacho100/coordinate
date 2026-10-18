@@ -13,10 +13,10 @@ type Props = {
   /** 読み上げ名。長押しで小さく見せる名前も同じ。必須。 */
   accessibilityLabel: string;
   onPress: () => void;
-  /** main: 金の丸(いま押すもの)。plain: 枠なしの細い線。 */
-  variant?: 'main' | 'plain';
+  /** main: 金の丸(いま押すもの)。outline: 細い枠の丸。plain: 枠なしの細い線。 */
+  variant?: 'main' | 'plain' | 'outline';
   disabled?: boolean;
-  /** main の直径。既定 56。plain は 44 固定。 */
+  /** main / outline の直径。既定 56。plain は 44 固定。 */
   size?: number;
   tooltipPlacement?: 'above' | 'below';
 };
@@ -32,7 +32,8 @@ export function IconButton({
   tooltipPlacement = 'above',
 }: Props) {
   const main = variant === 'main';
-  const box = main ? Math.max(size, 44) : 44;
+  const outline = variant === 'outline';
+  const box = main || outline ? Math.max(size, 44) : 44;
   const [tip, setTip] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,10 +63,11 @@ export function IconButton({
           styles.base,
           { width: box, height: box, borderRadius: box / 2 },
           main && { backgroundColor: Colors.accent },
+          outline && styles.outline,
           pressed && styles.pressed,
           disabled && styles.disabled,
         ]}>
-        <Icon name={icon} size={main ? 26 : 24} color={main ? '#0F0E0D' : Colors.text} />
+        <Icon name={icon} size={main ? 26 : 24} color={main ? Colors.onAccent : Colors.text} />
       </Pressable>
       {tip ? (
         <View
@@ -83,6 +85,7 @@ export function IconButton({
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
   base: { alignItems: 'center', justifyContent: 'center' },
+  outline: { borderWidth: 1, borderColor: Colors.textSecondary },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.4 },
   tip: {

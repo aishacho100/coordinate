@@ -9,6 +9,7 @@ import { Chip } from '@/components/controls';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { EditorCanvas } from '@/features/editor/editor-canvas';
 import { useEditor } from '@/features/editor/editor-context';
 import {
@@ -33,6 +34,7 @@ type Status = { kind: 'info' | 'error'; text: string } | null;
 
 export default function ExportScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { snapshot, dispatch } = useEditor();
   const { width: winW, height: winH } = useWindowDimensions();
   const shotRef = useRef<View>(null);
@@ -112,7 +114,7 @@ export default function ExportScreen() {
             <ThemedText
               type="small"
               accessibilityRole={status.kind === 'error' ? 'alert' : undefined}
-              style={{ color: status.kind === 'error' ? '#C0392B' : '#2E7D4F' }}>
+              style={{ color: status.kind === 'error' ? theme.error : theme.success }}>
               {status.text}
             </ThemedText>
           ) : null}

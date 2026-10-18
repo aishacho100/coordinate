@@ -1,9 +1,10 @@
 import type { IdentifyCandidate, IdentifyResponse, IdentifyVerdict, SearchStatus } from '@coordinate/shared';
 import { Image } from 'expo-image';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { formatAsOf, formatPrice } from '@/lib/format-price';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -14,8 +15,8 @@ const HEADING: Record<IdentifyVerdict, string> = {
 };
 
 const SUBTEXT: Partial<Record<IdentifyVerdict, string>> = {
-  candidates: '似ている商品です。同じ商品とは確認できていません。',
-  unidentified: '写真から読み取れる手がかりが足りず、商品名やブランドは決められませんでした。',
+  candidates: '似ている商品です。同じ商品と断定はできません。',
+  unidentified: '手がかりが足りず、商品名やブランドを決められませんでした。',
 };
 
 const SEARCH_SUBJECT = { lens: '画像検索は', serpapi: 'Google ショッピングの検索は', rakuten: '楽天市場の検索は' } as const;
@@ -31,13 +32,10 @@ const PRICE_LABEL: Record<string, string> = {
   google_shopping: 'Google ショッピングの表示価格',
 };
 
-/** Lens の販売元がこれより長いときは、リンクに入れず別の行に出す。 */
-
 const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
 
 /** 商品特定の結果。確信度の数値は出さない(並び順は API 側で済んでいる)。 */
 export function ProductCandidates({ response }: { response: IdentifyResponse }) {
-  const theme = useTheme();
   const unavailable = (['lens', 'serpapi', 'rakuten'] as const)
     .filter((k) => response.searches[k] !== 'ok')
     .map((k) => {
@@ -51,7 +49,7 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
     response.verdict !== 'unidentified' && response.candidates.some((c) => c.product.source === 'rakuten');
 
   return (
-    <View style={[styles.wrap, { borderColor: theme.border }]}>
+    <View style={styles.wrap}>
       <ThemedText type="subtitle">{HEADING[response.verdict]}</ThemedText>
       {subtext ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -64,9 +62,13 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
         </ThemedText>
       ) : null}
 
-      {response.verdict !== 'unidentified'
-        ? response.candidates.map((c) => <Candidate key={`${c.product.source}:${c.product.productId}`} candidate={c} />)
-        : null}
+      {response.verdict !== 'unidentified' && response.candidates.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {response.candidates.map((c) => (
+            <Candidate key={`${c.product.source}:${c.product.productId}`} candidate={c} />
+          ))}
+        </ScrollView>
+      ) : null}
 
       {unavailable.length > 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -119,47 +121,66 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             : '商品ページを見る'
           : null;
 
+  const same = candidate.matchType === 'identical';
+
   return (
-    <View style={[styles.candidate, { borderColor: theme.border }]}>
-      {product.imageUrl ? (
-        <Image
-          source={{ uri: product.imageUrl }}
-          style={[styles.thumb, { backgroundColor: theme.backgroundElement }]}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
-        />
-      ) : null}
+    <View style={[styles.candidate, { backgroundColor: theme.backgroundElement }]}>
+      <View style={[styles.imageBox, { backgroundColor: theme.backgroundSelected }]}>
+        {product.imageUrl ? (
+          <Image
+            source={{ uri: product.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
+      </View>
       <View style={styles.body}>
-        <ThemedText type="default" style={styles.productName} numberOfLines={2} ellipsizeMode="tail">
+        <ThemedText type="small" style={styles.productName} numberOfLines={2} ellipsizeMode="tail">
           {product.name}
         </ThemedText>
-        {price ? (
-          <View>
-            <ThemedText type="subtitle">{formatPrice(price.amount, price.currency)}</ThemedText>
-            {priceLabel ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {priceLabel}
-              </ThemedText>
-            ) : null}
-            {asOf ? (
-              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                {asOf}
-              </ThemedText>
-            ) : null}
+        <View style={styles.priceRow}>
+          {price ? (
+            <ThemedText type="subtitle" style={styles.price}>
+              {formatPrice(price.amount, price.currency)}
+            </ThemedText>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.noPrice}>
+              価格は取得できませんでした
+            </ThemedText>
+          )}
+          <View accessible accessibilityLabel={same ? '写真と同じ' : '似ている'} style={styles.mark}>
+            <Icon name={same ? 'check' : 'similar'} size={18} color={same ? Colors.accent : Colors.textSecondary} />
           </View>
-        ) : (
-          <ThemedText type="small" themeColor="textSecondary">
-            価格は取得できませんでした
+        </View>
+        {price && priceLabel ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.fine}>
+            {priceLabel}
           </ThemedText>
-        )}
+        ) : null}
+        {price && asOf ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.fine} numberOfLines={1}>
+            {asOf}
+          </ThemedText>
+        ) : null}
         {product.seller ? (
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="tail">
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.fine}
+            numberOfLines={1}
+            ellipsizeMode="tail">
             {product.seller}
           </ThemedText>
         ) : null}
-        {matched.length > 0 ? <ThemedText type="small">{`一致した点: ${matched.join('、')}`}</ThemedText> : null}
+        {matched.length > 0 ? (
+          <ThemedText type="small" style={styles.fine}>{`一致した点: ${matched.join('、')}`}</ThemedText>
+        ) : null}
         {unconfirmed.length > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.fine}>{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
         ) : null}
         {product.pageUrl && linkLabel ? (
           <Pressable
@@ -168,7 +189,10 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             onPress={() => void Linking.openURL(product.pageUrl as string)}
             hitSlop={8}
             style={styles.link}>
-            <ThemedText type="smallBold" style={[styles.linkText, { borderBottomColor: theme.text }]}>
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={[styles.fine, styles.linkText, { borderBottomColor: theme.text }]}>
               {linkLabel}
             </ThemedText>
           </Pressable>
@@ -178,17 +202,20 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
   );
 }
 
+const CARD_W = 176;
+
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.two, paddingTop: Spacing.three, borderTopWidth: StyleSheet.hairlineWidth * 2 },
-  candidate: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    paddingTop: Spacing.three,
-    borderTopWidth: StyleSheet.hairlineWidth * 2,
-  },
-  thumb: { width: 72, height: 72, borderRadius: 8 },
-  body: { flex: 1, gap: Spacing.one },
-  productName: { fontSize: 14, lineHeight: 22 },
+  wrap: { gap: Spacing.two },
+  row: { gap: Spacing.two, paddingVertical: Spacing.one },
+  candidate: { width: CARD_W, borderRadius: 14, padding: Spacing.two, gap: Spacing.two },
+  imageBox: { width: '100%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden' },
+  body: { gap: Spacing.half },
+  productName: { fontSize: 13, lineHeight: 19 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one },
+  price: { fontSize: 17, lineHeight: 26, flexShrink: 1 },
+  noPrice: { flexShrink: 1, fontSize: 12 },
+  mark: { minWidth: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
+  fine: { fontSize: 11, lineHeight: 17, letterSpacing: 0.2 },
   link: { alignSelf: 'flex-start', paddingTop: Spacing.one },
   linkText: { borderBottomWidth: StyleSheet.hairlineWidth * 2 },
   credit: { fontSize: 11, lineHeight: 16, letterSpacing: 0.6 },
