@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, Box, IdentificationLevel, Quality } from '@coordinate/shared';
+import type { AnalyzeResponse, Box, DetectedItem, IdentificationLevel, IdentifyResponse, Quality } from '@coordinate/shared';
 
 import type { AnalyzeErrorKind } from '@/lib/analyze-api';
 
@@ -12,7 +12,16 @@ export type ResultItem = {
   box: Box;
   origin: 'ai' | 'manual';
   level: IdentificationLevel;
+  /** 検出時のアイテム(特徴つき)。手動追加は null。 */
+  detected: DetectedItem | null;
+  identify: IdentifyState;
 };
+
+export type IdentifyState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'failed'; kind: AnalyzeErrorKind }
+  | { status: 'done'; response: IdentifyResponse };
 
 export type AnalysisState =
   | { status: 'idle' }
@@ -38,6 +47,9 @@ export type AnalysisAction =
   | { type: 'setBrand'; id: string; brand: string }
   | { type: 'remove'; id: string }
   | { type: 'addManual'; id: string; categoryId: string }
+  | { type: 'identifyStart'; id: string }
+  | { type: 'identifySucceeded'; id: string; response: IdentifyResponse }
+  | { type: 'identifyFailed'; id: string; kind: AnalyzeErrorKind }
   | { type: 'applied' }
   | { type: 'reset' };
 
@@ -62,6 +74,8 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
           box: i.box,
           origin: 'ai' as const,
           level: i.level,
+          detected: i,
+          identify: { status: 'idle' as const },
         })),
         quality: action.response.quality,
         timings: action.response.timings,
@@ -73,7 +87,10 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
   if (state.status !== 'done') return state;
   switch (action.type) {
     case 'setCategory':
-      return { ...state, items: state.items.map((i) => (i.id === action.id ? { ...i, categoryId: action.categoryId } : i)) };
+      return {
+        ...state,
+        items: state.items.map((i) => (i.id === action.id ? { ...i, categoryId: action.categoryId, identify: { status: 'idle' } } : i)),
+      };
     case 'setBrand':
       return { ...state, items: state.items.map((i) => (i.id === action.id ? { ...i, brand: action.brand } : i)) };
     case 'remove':
@@ -83,10 +100,20 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
         ...state,
         items: [
           ...state.items,
-          { id: action.id, categoryId: action.categoryId, brand: '', box: MANUAL_BOX, origin: 'manual', level: 'unidentified' },
+          { id: action.id, categoryId: action.categoryId, brand: '', box: MANUAL_BOX, origin: 'manual', level: 'unidentified', detected: null, identify: { status: 'idle' } },
         ],
       };
+    case 'identifyStart':
+      return withIdentify(state, action.id, { status: 'loading' });
+    case 'identifySucceeded':
+      return withIdentify(state, action.id, { status: 'done', response: action.response });
+    case 'identifyFailed':
+      return withIdentify(state, action.id, { status: 'failed', kind: action.kind });
     case 'applied':
       return { ...state, applied: true };
   }
+}
+
+function withIdentify(state: Extract<AnalysisState, { status: 'done' }>, id: string, identify: IdentifyState): AnalysisState {
+  return { ...state, items: state.items.map((i) => (i.id === id ? { ...i, identify } : i)) };
 }

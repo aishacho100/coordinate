@@ -10,6 +10,8 @@ const item = (id: string, x: number, y: number, over: Partial<ResultItem> = {}):
   box: { x, y, w: 0.2, h: 0.2 },
   origin: 'ai',
   level: 'unidentified',
+  detected: null,
+  identify: { status: 'idle' },
   ...over,
 });
 

@@ -103,8 +103,8 @@ describe('認識結果画面', () => {
   const doneState = (over: Partial<Extract<AnalysisState, { status: 'done' }>> = {}): AnalysisState => ({
     status: 'done',
     items: [
-      { id: 'a', categoryId: 'tshirt', brand: 'NIKE', box: { x: 0.2, y: 0.2, w: 0.3, h: 0.3 }, origin: 'ai', level: 'medium' },
-      { id: 'b', categoryId: 'sneakers', brand: '', box: { x: 0.4, y: 0.8, w: 0.2, h: 0.15 }, origin: 'ai', level: 'unidentified' },
+      { id: 'a', categoryId: 'tshirt', brand: 'NIKE', box: { x: 0.2, y: 0.2, w: 0.3, h: 0.3 }, origin: 'ai', level: 'medium', detected: null, identify: { status: 'idle' } },
+      { id: 'b', categoryId: 'sneakers', brand: '', box: { x: 0.4, y: 0.8, w: 0.2, h: 0.15 }, origin: 'ai', level: 'unidentified', detected: null, identify: { status: 'idle' } },
     ],
     quality: { ok: true, issues: [] },
     timings: { quality: 120, detect: 4200, total: 4400 },
