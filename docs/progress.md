@@ -1,12 +1,13 @@
 # 進捗と再開メモ
 
-最終更新: Phase 3 完了(エミュレータで実際の Claude を呼んだ通し確認まで)。
+最終更新: Phase 4(商品特定)の実装が完了。実 API の評価とエミュレータ確認は未実施。
 
 ## 現在地
 
 - Phase 1(基盤)、Phase 2(画像編集)、Phase 3(AI アイテム検出)完了。**次は Phase 4(商品特定)**。着手前に必要なことは下の「次: Phase 4」を参照。
-- Git: Phase 3 はブランチ `phase3-detection` で作業(main へは未マージ)。
-- テスト: api 62 / mobile 73 / layout 43 / shared 7、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
+- Phase 4(商品特定)の実装(api の `/v1/identify`、SerpApi・楽天の検索、Claude の照合、モバイルの「商品を探す」)はブランチ `phase4-identification` で完了。**実 API の評価(`npm run eval:identify -w api -- --max-searches 40`)とエミュレータでの通し確認は未実施**。評価結果は `docs/phase4-evaluation.md` に記録する予定。
+- Git: Phase 3 はブランチ `phase3-detection`、Phase 4 は `phase4-identification` で作業(いずれも main へは未マージ)。
+- テスト: api 161 / mobile 110 / layout 43 / shared 14、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
 
 ## 開発ビルドでの保存確認(完了)
 
@@ -104,10 +105,13 @@ npm start -w api          # http://localhost:8787 。/health で確認
 ```
 
 評価スクリプト: `npm run eval -w api`(写真は `apps/api/eval/photos/`、Git 管理外)。
+商品特定の評価: `npm run eval:identify -w api -- --max-searches 40 [--photos a,b]`(実 API を呼ぶ。SerpApi は指定回数で止まる。結果は `apps/api/eval/results/identify-<日時>.json`、Git 管理外)。Phase 4 の設定は `.env.example` を参照。
 
-## 次: Phase 4(商品特定)
+## 次: Phase 4 の残り(評価と実機確認)
 
-着手前に必要なこと(いずれも未着手):
+実装は完了。残りは次の 2 点(未実施): 実 API の評価、エミュレータでの通し確認。
+
+(旧)着手前に必要だったこと:
 
 1. SerpApi・楽天市場 API の公式ドキュメント・料金・利用規約の調査と、ユーザーへの報告
 2. SerpApi の API キーの取得(ユーザー)
