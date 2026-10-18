@@ -6,19 +6,21 @@ import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
   label: string;
+  /** 読み上げ用の名前。省略すると label を使う。 */
+  accessibilityLabel?: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
 };
 
 /** 幅を絞った中央配置のボタン。主要操作は塗り、副次操作は細い線。 */
-export function AppButton({ label, onPress, variant = 'primary', disabled = false }: Props) {
+export function AppButton({ label, accessibilityLabel, onPress, variant = 'primary', disabled = false }: Props) {
   const theme = useTheme();
   const primary = variant === 'primary';
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

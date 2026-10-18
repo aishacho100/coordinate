@@ -1,20 +1,24 @@
 import { DEFAULT_CATEGORIES, type QualityIssue } from '@coordinate/shared';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { Chip } from '@/components/controls';
+import { ProductCandidates } from '@/components/product-candidates';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Spacing } from '@/constants/theme';
 import { newItemId, useAnalysis } from '@/features/analysis/analysis-context';
 import type { ResultItem } from '@/features/analysis/analysis-reducer';
+import { cropItem } from '@/features/analysis/crop-item';
 import { itemsToLabelInputs } from '@/features/analysis/items-to-labels';
 import { newLabelId, useEditor } from '@/features/editor/editor-context';
 import { currentCrop } from '@/features/editor/reducer';
 import { useTheme } from '@/hooks/use-theme';
+import { AnalyzeError, ERROR_MESSAGES } from '@/lib/analyze-api';
+import { identifyItem } from '@/lib/identify-api';
 
 const GROUPS = [
   ['clothing', '衣類'],
@@ -41,6 +45,8 @@ export default function ResultScreen() {
   const { state, dispatch } = useAnalysis();
   // どの項目のカテゴリ選択を開いているか。'new' は手動追加。
   const [picking, setPicking] = useState<string | null>(null);
+  // 探している最中の項目。state の更新を待たずに、二重に送らないための印。
+  const searching = useRef(new Set<string>());
 
   if (!snapshot || state.status !== 'done') {
     return (
@@ -53,6 +59,21 @@ export default function ResultScreen() {
 
   const { photo } = snapshot;
   const togglePicking = (key: string) => setPicking((cur) => (cur === key ? null : key));
+
+  const search = async (it: ResultItem) => {
+    if (!it.detected || searching.current.has(it.id)) return;
+    searching.current.add(it.id);
+    dispatch({ type: 'identifyStart', id: it.id });
+    try {
+      const cropUri = await cropItem(photo, it.box);
+      const response = await identifyItem(cropUri, { ...it.detected, categoryId: it.categoryId });
+      dispatch({ type: 'identifySucceeded', id: it.id, response });
+    } catch (e) {
+      dispatch({ type: 'identifyFailed', id: it.id, kind: e instanceof AnalyzeError ? e.kind : 'identify_failed' });
+    } finally {
+      searching.current.delete(it.id);
+    }
+  };
 
   const proceed = () => {
     // 戻ってきて再度進んでも、ラベルを二重に追加しない。
@@ -132,6 +153,7 @@ export default function ResultScreen() {
           }}
           onBrand={(brand) => dispatch({ type: 'setBrand', id: it.id, brand })}
           onRemove={() => dispatch({ type: 'remove', id: it.id })}
+          onSearch={() => void search(it)}
         />
       ))}
 
@@ -163,6 +185,7 @@ function ItemCard({
   onPick,
   onBrand,
   onRemove,
+  onSearch,
 }: {
   index: number;
   item: ResultItem;
@@ -171,6 +194,7 @@ function ItemCard({
   onPick: (categoryId: string) => void;
   onBrand: (brand: string) => void;
   onRemove: () => void;
+  onSearch: () => void;
 }) {
   const theme = useTheme();
   const name = categoryName(item.categoryId);
@@ -211,9 +235,54 @@ function ItemCard({
         </ThemedText>
       </View>
 
+      {item.detected ? <SearchSection name={name} identify={item.identify} onSearch={onSearch} /> : null}
+
       <View style={styles.cardFoot}>
         <Chip label="削除" accessibilityLabel={`${name}を削除`} selected={false} onPress={onRemove} />
       </View>
+    </View>
+  );
+}
+
+function SearchSection({
+  name,
+  identify,
+  onSearch,
+}: {
+  name: string;
+  identify: ResultItem['identify'];
+  onSearch: () => void;
+}) {
+  const theme = useTheme();
+  if (identify.status === 'loading') {
+    return (
+      <View style={styles.search}>
+        <ActivityIndicator color={theme.textSecondary} />
+        <AppButton label="探しています" variant="secondary" disabled onPress={onSearch} />
+      </View>
+    );
+  }
+  if (identify.status === 'failed') {
+    return (
+      <View style={styles.search}>
+        <ThemedText type="small" themeColor="textSecondary" accessibilityRole="alert" style={styles.centerText}>
+          {ERROR_MESSAGES[identify.kind]}
+        </ThemedText>
+        <AppButton label="もう一度探す" variant="secondary" onPress={onSearch} />
+      </View>
+    );
+  }
+  if (identify.status === 'done') {
+    return (
+      <View style={styles.search}>
+        <ProductCandidates response={identify.response} />
+        <AppButton label="もう一度探す" variant="secondary" onPress={onSearch} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.search}>
+      <AppButton label="商品を探す" accessibilityLabel={`${name}の商品を探す`} variant="secondary" onPress={onSearch} />
     </View>
   );
 }
@@ -270,6 +339,8 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sans,
     fontSize: 15,
   },
+  search: { gap: Spacing.three },
+  centerText: { textAlign: 'center' },
   cardFoot: { flexDirection: 'row', justifyContent: 'flex-end' },
   picker: { gap: Spacing.three },
   pickerGroup: { gap: Spacing.two },

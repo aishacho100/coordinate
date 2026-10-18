@@ -12,6 +12,7 @@ import type { AnalysisState } from '@/features/analysis/analysis-reducer';
 import { EditorProvider, useEditor } from '@/features/editor/editor-context';
 import { editorReducer, initialEditorState } from '@/features/editor/reducer';
 import { AnalyzeError } from '@/lib/analyze-api';
+import type { DetectedItem, IdentifyResponse } from '@coordinate/shared';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -30,6 +31,16 @@ jest.mock('@/lib/analyze-api', () => {
   const actual = jest.requireActual('@/lib/analyze-api');
   return { ...actual, analyzePhoto: (...args: unknown[]) => mockAnalyzePhoto(...args) };
 });
+
+const mockCropItem = jest.fn();
+jest.mock('@/features/analysis/crop-item', () => ({
+  cropItem: (...args: unknown[]) => mockCropItem(...args),
+}));
+
+const mockIdentifyItem = jest.fn();
+jest.mock('@/lib/identify-api', () => ({
+  identifyItem: (...args: unknown[]) => mockIdentifyItem(...args),
+}));
 
 const withProvider = (ui: ReactElement) => (
   <EditorProvider>
@@ -183,6 +194,146 @@ describe('認識結果画面', () => {
     ]);
     fireEvent.press(screen.getByLabelText('この内容で編集へ'));
     expect(labels).toHaveLength(2);
+  });
+
+  describe('商品を探す', () => {
+    const detected: DetectedItem = {
+      id: 'a',
+      categoryId: 'tshirt',
+      box: { x: 0.2, y: 0.2, w: 0.3, h: 0.3 },
+      appearance: { colors: ['white'], visibleText: ['NIKE'] },
+      brandCandidates: [{ name: 'NIKE', score: 0.8 }],
+      candidates: [],
+      confidence: { detection: 0.9, category: 0.9, brand: 0.8, model: null, variant: null, price: null },
+      level: 'medium',
+      reviewState: 'auto',
+      rationale: '',
+      modelVersion: 'm',
+    };
+    const identified: IdentifyResponse = {
+      itemId: 'a',
+      verdict: 'candidates',
+      level: 'low',
+      rationale: '',
+      candidates: [
+        {
+          product: {
+            source: 'rakuten',
+            productId: 'r1',
+            brand: '',
+            name: '無地Tシャツ',
+            pageUrl: 'https://item.rakuten.co.jp/shop/t1/',
+            price: { amount: 7590, currency: 'JPY', kind: 'list', fetchedAt: '2026-10-18T00:00:00.000Z' },
+            fetchedAt: '2026-10-18T00:00:00.000Z',
+          },
+          matchScore: 0.5,
+          matchType: 'similar',
+          matched: ['色'],
+          unconfirmed: [],
+        },
+      ],
+      searches: { serpapi: 'not_configured', rakuten: 'ok' },
+      comparison: 'done',
+      queries: ['q'],
+      usage: { claude: { inputTokens: 1, outputTokens: 1 }, serpapiSearches: 0, rakutenCalls: 1 },
+      estimatedCostUsd: 0.01,
+      fetchedAt: '2026-10-18T00:00:00.000Z',
+      timings: { total: 100 },
+    };
+    const aiState = (): AnalysisState => ({
+      status: 'done',
+      items: [
+        { id: 'a', categoryId: 'tshirt', brand: 'NIKE', box: detected.box, origin: 'ai', level: 'medium', detected, identify: { status: 'idle' } },
+        { id: 'm', categoryId: 'hat', brand: '', box: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }, origin: 'manual', level: 'unidentified', detected: null, identify: { status: 'idle' } },
+      ],
+      quality: { ok: true, issues: [] },
+      timings: { quality: 120, detect: 4200, total: 4400 },
+      model: 'claude-sonnet-5-5',
+      applied: false,
+    });
+
+    beforeEach(() => {
+      mockCropItem.mockResolvedValue('file:///crop.jpg');
+    });
+
+    it('AI の項目にだけ「商品を探す」がある(手動追加には無い)', () => {
+      renderResult(aiState());
+      expect(screen.getByLabelText('Tシャツの商品を探す')).toBeTruthy();
+      expect(screen.queryByLabelText('帽子の商品を探す')).toBeNull();
+    });
+
+    it('押すと切り抜いて identifyItem を呼び、読み込み表示のあと候補が出る', async () => {
+      let resolve!: (r: IdentifyResponse) => void;
+      mockIdentifyItem.mockReturnValue(new Promise<IdentifyResponse>((r) => (resolve = r)));
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+      expect(await screen.findByText('探しています')).toBeTruthy();
+      expect(mockCropItem).toHaveBeenCalledWith({ uri: 'file:///a.jpg', width: 3000, height: 4000 }, detected.box);
+      await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected));
+      resolve(identified);
+      expect(await screen.findByText('候補が見つかりました')).toBeTruthy();
+      expect(screen.getByText('¥7,590')).toBeTruthy();
+      expect(screen.getByLabelText('もう一度探す')).toBeTruthy();
+    });
+
+    it('カテゴリを変えたあとは、変更後のカテゴリで探す', async () => {
+      mockIdentifyItem.mockResolvedValue(identified);
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+      fireEvent.press(screen.getByLabelText('ニット'));
+      fireEvent.press(screen.getByLabelText('ニットの商品を探す'));
+      await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalled());
+      expect(mockIdentifyItem.mock.calls[0]?.[1]).toMatchObject({ id: 'a', categoryId: 'knit' });
+    });
+
+    it('失敗すると日本語のエラーを出し、「もう一度探す」で再実行できる', async () => {
+      mockIdentifyItem.mockRejectedValueOnce(new AnalyzeError('network'));
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+      expect(await screen.findByText('通信できませんでした。ネットワークを確認して、もう一度お試しください。')).toBeTruthy();
+      expect(screen.getByRole('alert')).toBeTruthy();
+
+      mockIdentifyItem.mockResolvedValueOnce(identified);
+      fireEvent.press(screen.getByLabelText('もう一度探す'));
+      expect(await screen.findByText('候補が見つかりました')).toBeTruthy();
+      expect(mockIdentifyItem).toHaveBeenCalledTimes(2);
+    });
+
+    it('切り抜きに失敗しても、識別失敗として扱う', async () => {
+      mockCropItem.mockRejectedValueOnce(new Error('crop'));
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+      expect(await screen.findByText('商品を特定できませんでした。もう一度お試しください。')).toBeTruthy();
+      expect(mockIdentifyItem).not.toHaveBeenCalled();
+    });
+
+    it('上限超過の文言を出す', async () => {
+      mockIdentifyItem.mockRejectedValue(new AnalyzeError('quota_exceeded'));
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+      expect(await screen.findByText('本日の商品検索の上限に達しました。明日またお試しください。')).toBeTruthy();
+    });
+
+    it('読み込み中の二度押しで identifyItem は二重に呼ばれない', async () => {
+      mockIdentifyItem.mockReturnValue(new Promise(() => {}));
+      renderResult(aiState());
+      const button = screen.getByLabelText('Tシャツの商品を探す');
+      fireEvent.press(button);
+      fireEvent.press(button);
+      await screen.findByText('探しています');
+      fireEvent.press(screen.getByLabelText('探しています'));
+      await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledTimes(1));
+      expect(mockCropItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('探したあとも「この内容で編集へ」は変わらず動く', async () => {
+      mockIdentifyItem.mockResolvedValue(identified);
+      renderResult(aiState());
+      fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+      await screen.findByText('候補が見つかりました');
+      fireEvent.press(screen.getByLabelText('この内容で編集へ'));
+      expect(mockPush).toHaveBeenCalledWith('/editor');
+    });
   });
 
   it('解析結果が無ければホームへ戻る導線を出す', () => {
