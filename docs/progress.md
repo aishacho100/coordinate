@@ -1,11 +1,11 @@
 # 進捗と再開メモ
 
-最終更新: Phase 4(商品特定)の実装が完了。実 API の評価とエミュレータ確認は未実施。
+最終更新: Phase 4(商品特定)の実装と実 API の評価が完了。エミュレータ確認は未実施。UI 刷新は手順 3 作業中。
 
 ## 現在地
 
 - Phase 1(基盤)、Phase 2(画像編集)、Phase 3(AI アイテム検出)完了。**次は Phase 4(商品特定)**。着手前に必要なことは下の「次: Phase 4」を参照。
-- Phase 4(商品特定)の実装(api の `/v1/identify`、SerpApi・楽天の検索、Claude の照合、モバイルの「商品を探す」)はブランチ `phase4-identification` で完了。**実 API の評価(`npm run eval:identify -w api -- --max-searches 40`)とエミュレータでの通し確認は未実施**。評価結果は `docs/phase4-evaluation.md` に記録する予定。
+- Phase 4(商品特定)の実装(api の `/v1/identify`、SerpApi・楽天の検索、Claude の照合、モバイルの「商品を探す」)はブランチ `phase4-identification` で完了。実 API の評価は実施済み(結果は `docs/phase4-evaluation.md`)。**エミュレータでの通し確認は未実施**。
 - Git: Phase 3 はブランチ `phase3-detection`、Phase 4 は `phase4-identification` で作業(いずれも main へは未マージ)。
 - テスト: api 161 / mobile 110 / layout 43 / shared 14、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
 
@@ -109,7 +109,7 @@ npm start -w api          # http://localhost:8787 。/health で確認
 
 ## 次: Phase 4 の残り(評価と実機確認)
 
-実装は完了。残りは次の 2 点(未実施): 実 API の評価、エミュレータでの通し確認。
+実装は完了。実 API の評価は 2026-10-18 に実施済み(A 3 / B 11 / C 0、`docs/phase4-evaluation.md`)。残りは、エミュレータでの通し確認(未実施)。UI は、ダーク・ギャラリーへの刷新を並行して進行中(`docs/superpowers/specs/2026-10-18-dark-visual-redesign-design.md`、手順 1・2 完了、手順 3 作業中)。
 
 (旧)着手前に必要だったこと:
 
