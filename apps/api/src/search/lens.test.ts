@@ -156,6 +156,18 @@ describe('LensSearcher', () => {
     }
   });
 
+  it('「結果なし」と判定するのは SerpApi の既知の文言だけ。それ以外の error は failed(api_error)', async () => {
+    for (const error of ['Invalid API key.', 'Your account has run out of searches.', 'No results found for this account', 'Google hasn\'t returned any results']) {
+      const { s } = make(fakeFetch({ body: UPLOAD_OK }, { body: { error } }));
+      const r = await s.searchByImage(JPEG);
+      if (error.includes("hasn't returned any results")) {
+        expect(r).toMatchObject({ status: 'ok', products: [], calls: 2 });
+      } else {
+        expect(r).toMatchObject({ status: 'failed', calls: 2, detail: 'api_error' });
+      }
+    }
+  });
+
   it('キー未設定は not_configured で、通信しない', async () => {
     const f = fakeFetch({ body: UPLOAD_OK }, { body: {} });
     const { s } = make(f, { key: null });

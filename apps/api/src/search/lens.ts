@@ -37,7 +37,7 @@ const UploadResponse = z.object({ image_id: z.string().min(1) });
 const WARN_RATIO = 0.8;
 const YEN = new Set(['￥', '¥', 'JPY', '円']);
 /** SerpApi が結果なしのときに 200 で返すメッセージ("Google Lens hasn't returned any results for this query.")。 */
-const NO_RESULTS = /hasn't returned any results|no results/i;
+const NO_RESULTS = /hasn't returned any results/i;
 
 type Deps = {
   apiKey: string | null;
