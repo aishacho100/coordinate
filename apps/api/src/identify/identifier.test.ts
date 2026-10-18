@@ -121,6 +121,23 @@ describe('Identifier', () => {
     expect(r.candidates[0]?.matchType).toBe('similar');
   });
 
+  it('照合が失敗したときは、ブランドを読めていても level は low に固定する', async () => {
+    const brandItem: DetectedItem = {
+      ...sampleItem,
+      appearance: { ...sampleItem.appearance, visibleText: ['NIKE'] },
+      brandCandidates: [{ name: 'Nike', score: 0.9 }],
+    };
+    const r = await make({
+      comparer: {
+        compare: async () => {
+          throw new Error('x');
+        },
+      },
+    }).identify(img, brandItem);
+    expect(r.comparison).toBe('failed');
+    expect(r.level).toBe('low');
+  });
+
   it('検索語の生成が失敗したら例外(検索は一度も行わない)', async () => {
     const serp = searcher([ok([])]);
     await expect(

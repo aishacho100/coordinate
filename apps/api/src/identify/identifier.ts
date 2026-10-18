@@ -99,7 +99,8 @@ export class Identifier {
       }
     }
 
-    const level = verdictToLevel(verdict, brandRead !== null);
+    // 照合できていないときは、ブランドを読めていても確からしさを上げない。
+    const level = comparison === 'failed' ? 'low' : verdictToLevel(verdict, brandRead !== null);
     const serpapiSearches = serp.calls;
     const rakutenCalls = rak.calls;
     const claudeCost = estimateCostUsd(claude, this.deps.pricing);
