@@ -18,18 +18,23 @@ function words(s: string): string {
 }
 
 /**
- * ブランドが、写真内の読み取り文字の中に「語として丸ごと」現れていれば、その文字を返す。
- * 文字の断片(THE → The North Face)や別の単語に埋もれた一致(ON → SEASON)は根拠にしない。
+ * ブランドが、文章の中に「語として丸ごと」現れているかを判定する。
+ * 文字の断片(THE → The North Face)や別の単語に埋もれた一致(ON → SEASON)は一致とみなさない。
  * 空白の有無の違い(NewBalance ↔ New Balance)は同じとみなす。
  */
-function findEvidence(brand: string, visibleText: string[]): string | null {
+export function containsWholeWords(brand: string, text: string): boolean {
   const b = words(brand);
   const bCompact = b.replace(/ /g, '');
-  if (bCompact.length < 2) return null;
+  if (bCompact.length < 2) return false;
+  const w = words(text);
+  if (w === '') return false;
+  return ` ${w} `.includes(` ${b} `) || w.replace(/ /g, '') === bCompact;
+}
+
+/** ブランドが、写真内の読み取り文字の中に語として丸ごと現れていれば、その文字を返す。 */
+function findEvidence(brand: string, visibleText: string[]): string | null {
   for (const t of visibleText) {
-    const w = words(t);
-    if (w === '') continue;
-    if (` ${w} `.includes(` ${b} `) || w.replace(/ /g, '') === bCompact) return t;
+    if (containsWholeWords(brand, t)) return t;
   }
   return null;
 }
