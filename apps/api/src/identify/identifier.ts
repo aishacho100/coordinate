@@ -26,8 +26,10 @@ export class SearchUnavailableError extends Error {
 
 /** 追加検索を行わなくてよい、1 つの検索元あたりの候補数。 */
 const ENOUGH = 3;
-/** 照合に渡す候補の最大数(検索元ごとに半分ずつ)。 */
-const COMPARE_LIMIT = 8;
+/** 照合に渡す候補の最大数。 */
+const COMPARE_LIMIT = 12;
+/** 照合に渡す、SerpApi の候補の最大数。残りは楽天(楽天が少なければ SerpApi の残りで埋める)。 */
+const SERPAPI_LIMIT = 8;
 
 type Deps = {
   queryGenerator: Pick<QueryGenerator, 'generate'>;
@@ -86,21 +88,27 @@ export class Identifier {
 
     const [serp, rak] = await Promise.all([
       this.collect(this.deps.serpapi, gen.queries, (d) => failure('serpapi', d)),
-      this.collect(this.deps.rakuten, gen.queries, (d) => failure('rakuten', d)),
+      // 楽天は AND 検索なので、語数の多い具体的な検索語では 0 件になりやすい。一般的な語(後ろ)から試す。
+      this.collect(this.deps.rakuten, [...gen.queries].reverse(), (d) => failure('rakuten', d)),
     ]);
     const usable = (s: SearchStatus) => s === 'ok';
     if (!usable(serp.status) && !usable(rak.status)) throw new SearchUnavailableError();
 
-    // 検索元ごとに半分ずつ取り、重複(同じ source と productId)を除く。
-    const half = COMPARE_LIMIT / 2;
-    const seen = new Set<string>();
-    const merged: Product[] = [];
-    for (const p of [...serp.products.slice(0, half), ...rak.products.slice(0, half)]) {
-      const k = `${p.source}:${p.productId}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      merged.push(p);
-    }
+    // SerpApi を最大 8 件、楽天を最大 4 件取り、重複(同じ source と productId)を除く。
+    // 楽天が少なければ、SerpApi の残りで COMPARE_LIMIT まで埋める。
+    const dedupe = (list: Product[]) => {
+      const seen = new Set<string>();
+      return list.filter((p) => {
+        const k = `${p.source}:${p.productId}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    };
+    const serpAll = dedupe(serp.products);
+    const rakAll = dedupe(rak.products).slice(0, COMPARE_LIMIT - SERPAPI_LIMIT);
+    const serpTake = Math.max(SERPAPI_LIMIT, COMPARE_LIMIT - rakAll.length);
+    const merged = dedupe([...serpAll.slice(0, serpTake), ...rakAll]);
 
     // クライアントの申告を信用せず、ブランドが写真の読み取り文字に語として現れるときだけ採用する。
     const claimed = item.brandCandidates[0]?.name ?? null;

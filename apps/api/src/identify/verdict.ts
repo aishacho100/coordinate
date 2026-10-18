@@ -13,7 +13,7 @@ export type Judgement = {
 };
 
 /** B に含める最低の類似度。Claude の自己申告であり、確率ではない。 */
-export const MIN_SIMILARITY = 0.4;
+export const MIN_SIMILARITY = 0.25;
 /** A に必要な最低の類似度。B より厳しくする。 */
 export const MIN_IDENTICAL_SIMILARITY = 0.7;
 export const MAX_CANDIDATES = 5;

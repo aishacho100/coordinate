@@ -33,6 +33,7 @@ const make = (
     accessKey: 'AK',
     affiliateId: 'AF',
   },
+  extra: Partial<ConstructorParameters<typeof RakutenSearcher>[0]> = {},
 ) =>
   new RakutenSearcher({
     rakuten,
@@ -42,6 +43,8 @@ const make = (
     timeoutMs: 1000,
     hits: 10,
     now: () => NOW,
+    minIntervalMs: 0,
+    ...extra,
   });
 
 describe('RakutenSearcher', () => {
@@ -110,5 +113,77 @@ describe('RakutenSearcher', () => {
     await s.search('same');
     expect((await s.search('same')).calls).toBe(0);
     expect(f.urls).toHaveLength(1);
+  });
+
+  describe('呼び出し間隔', () => {
+    /** 偽の時計。sleep した分だけ進み、実際には待たない。 */
+    const fakeClock = () => {
+      const c = { t: 1000, sleeps: [] as number[], sent: [] as number[] };
+      return {
+        c,
+        extra: {
+          clockMs: () => c.t,
+          sleep: async (ms: number) => {
+            c.sleeps.push(ms);
+            c.t += ms;
+          },
+        },
+      };
+    };
+    const stampedFetch =
+      (c: { t: number; sent: number[] }): FetchLike =>
+      async () => {
+        c.sent.push(c.t);
+        return { ok: true, status: 200, json: async () => ({ count: 0, Items: [] }) };
+      };
+
+    it('既定は 1100ms。前の送信から最小間隔が経つまで待ってから送る', async () => {
+      const { c, extra } = fakeClock();
+      const s = make(stampedFetch(c), undefined, { ...extra, minIntervalMs: undefined });
+      await s.search('a');
+      expect(c.sleeps).toEqual([]);
+      c.t += 300;
+      await s.search('b');
+      expect(c.sleeps).toEqual([800]);
+      expect(c.sent[1]! - c.sent[0]!).toBe(1100);
+    });
+
+    it('十分に間が空いていれば待たない', async () => {
+      const { c, extra } = fakeClock();
+      const s = make(stampedFetch(c), undefined, { ...extra, minIntervalMs: 500 });
+      await s.search('a');
+      c.t += 600;
+      await s.search('b');
+      expect(c.sleeps).toEqual([]);
+    });
+
+    it('キャッシュ命中のときは待たない', async () => {
+      const { c, extra } = fakeClock();
+      const s = make(stampedFetch(c), undefined, { ...extra, minIntervalMs: 1100 });
+      await s.search('same');
+      await s.search('same');
+      expect(c.sleeps).toEqual([]);
+      expect(c.sent).toHaveLength(1);
+    });
+
+    it('並行して呼んでも直列化し、送信は最小間隔を空ける', async () => {
+      const { c, extra } = fakeClock();
+      const s = make(stampedFetch(c), undefined, { ...extra, minIntervalMs: 1000 });
+      await Promise.all([s.search('a'), s.search('b'), s.search('c')]);
+      expect(c.sent).toEqual([1000, 2000, 3000]);
+    });
+
+    it('429 を受けても再試行せず failed(http_429)にする', async () => {
+      const { c, extra } = fakeClock();
+      let n = 0;
+      const f429: FetchLike = async () => {
+        n++;
+        return { ok: false, status: 429, json: async () => ({}) };
+      };
+      const r = await make(f429, undefined, extra).search('a');
+      expect(r).toMatchObject({ status: 'failed', detail: 'http_429' });
+      expect(n).toBe(1);
+      expect(c.sleeps).toEqual([]);
+    });
   });
 });

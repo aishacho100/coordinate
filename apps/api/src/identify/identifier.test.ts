@@ -63,7 +63,57 @@ describe('Identifier', () => {
     const rak = searcher([ok([])]);
     await make({ serpapi: serp, rakuten: rak }).identify(img, sampleItem);
     expect(serp.queries).toEqual(['q1', 'q2']);
-    expect(rak.queries).toEqual(['q1', 'q2']);
+    expect(rak.queries).toEqual(['q2', 'q1']);
+  });
+
+  it('SerpApi には具体的な語から、楽天には一般的な語から(逆順で)渡す', async () => {
+    const serp = searcher([ok([])]);
+    const rak = searcher([ok([])]);
+    await make({
+      serpapi: serp,
+      rakuten: rak,
+      queryGenerator: { generate: async () => ({ queries: ['具体', '中間', '一般'], usage: usage(1, 1) }) },
+      maxSearchesPerProvider: 2,
+    }).identify(img, sampleItem);
+    expect(serp.queries).toEqual(['具体', '中間']);
+    expect(rak.queries).toEqual(['一般', '中間']);
+  });
+
+  it('照合に渡す候補は最大 12 件。SerpApi を最大 8 件、楽天を最大 4 件', async () => {
+    const g = Array.from({ length: 20 }, (_, i) => product(`g${i}`, 'google_shopping'));
+    const r = Array.from({ length: 10 }, (_, i) => product(`r${i}`));
+    let passed: Product[] = [];
+    await make({
+      serpapi: searcher([ok(g)]),
+      rakuten: searcher([ok(r)]),
+      comparer: {
+        compare: async (_i, cands) => {
+          passed = cands;
+          return { judgements: [], usage: usage(1, 1) };
+        },
+      },
+    }).identify(img, sampleItem);
+    expect(passed).toHaveLength(12);
+    expect(passed.filter((p) => p.source === 'google_shopping')).toHaveLength(8);
+    expect(passed.filter((p) => p.source === 'rakuten')).toHaveLength(4);
+  });
+
+  it('楽天が少ないときは、SerpApi の残りで 12 件まで埋める', async () => {
+    const g = Array.from({ length: 20 }, (_, i) => product(`g${i}`, 'google_shopping'));
+    let passed: Product[] = [];
+    await make({
+      serpapi: searcher([ok(g)]),
+      rakuten: searcher([ok([product('r0')])]),
+      comparer: {
+        compare: async (_i, cands) => {
+          passed = cands;
+          return { judgements: [], usage: usage(1, 1) };
+        },
+      },
+    }).identify(img, sampleItem);
+    expect(passed).toHaveLength(12);
+    expect(passed.filter((p) => p.source === 'rakuten')).toHaveLength(1);
+    expect(passed.filter((p) => p.source === 'google_shopping')).toHaveLength(11);
   });
 
   it('十分な候補があれば追加検索しない', async () => {

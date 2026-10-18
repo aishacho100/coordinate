@@ -32,11 +32,41 @@ type Deps = {
   timeoutMs: number;
   hits: number;
   now?: () => Date;
+  /** リクエスト送信の最小間隔(ms)。既定 1100(楽天は 1 秒に 1 リクエスト程度)。 */
+  minIntervalMs?: number;
+  /** 待機。テストで差し替える。 */
+  sleep?: (ms: number) => Promise<void>;
+  /** 間隔の計測に使う単調な時計(ms)。テストで差し替える。 */
+  clockMs?: () => number;
 };
+
+const DEFAULT_MIN_INTERVAL_MS = 1100;
 
 /** 楽天市場商品検索。キャッシュはメモリのみ・短時間(規約: 不特定多数が共有できる保存は禁止)。 */
 export class RakutenSearcher implements ProductSearcher {
+  /** 送信を直列にするための鎖。 */
+  private chain: Promise<unknown> = Promise.resolve();
+  private lastSentAt: number | null = null;
+
   constructor(private readonly deps: Deps) {}
+
+  /** 前の送信から最小間隔が経つまで待ってから fn を実行する。同時に 1 件だけ実行する。 */
+  private throttled<T>(fn: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      const gap = this.deps.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
+      const clock = this.deps.clockMs ?? (() => performance.now());
+      const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+      if (this.lastSentAt !== null) {
+        const wait = this.lastSentAt + gap - clock();
+        if (wait > 0) await sleep(wait);
+      }
+      this.lastSentAt = clock();
+      return fn();
+    };
+    const next = this.chain.then(run, run);
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
 
   async search(query: string): Promise<SearchOutcome> {
     const { rakuten, cache, store } = this.deps;
@@ -56,23 +86,27 @@ export class RakutenSearcher implements ProductSearcher {
     });
     if (rakuten.affiliateId) params.set('affiliateId', rakuten.affiliateId);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, this.deps.timeoutMs);
-    let body: unknown;
-    let timedOut = false;
-    try {
-      const res = await this.deps.fetchImpl(`${ENDPOINT}?${params}`, { signal: controller.signal });
-      store.addMonthly(now, { rakuten: 1 });
-      if (!res.ok) return { status: 'failed', products: [], calls: 1, detail: `http_${res.status}` };
-      body = await res.json();
-    } catch {
-      return { status: 'failed', products: [], calls: 0, detail: timedOut ? 'timeout' : 'network' };
-    } finally {
-      clearTimeout(timer);
-    }
+    const sent = await this.throttled<{ fail: SearchOutcome } | { body: unknown }>(async () => {
+      const controller = new AbortController();
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, this.deps.timeoutMs);
+      try {
+        const res = await this.deps.fetchImpl(`${ENDPOINT}?${params}`, { signal: controller.signal });
+        store.addMonthly(now, { rakuten: 1 });
+        // 429 などは再試行しない(呼び出し側が次の検索語へ進むかを決める)。
+        if (!res.ok) return { fail: { status: 'failed', products: [], calls: 1, detail: `http_${res.status}` } as SearchOutcome };
+        return { body: (await res.json()) as unknown };
+      } catch {
+        return { fail: { status: 'failed', products: [], calls: 0, detail: timedOut ? 'timeout' : 'network' } as SearchOutcome };
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+    if ('fail' in sent) return sent.fail;
+    const body = sent.body;
 
     const parsed = Response.safeParse(body);
     if (!parsed.success) return { status: 'failed', products: [], calls: 1, detail: 'parse' };

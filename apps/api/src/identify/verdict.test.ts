@@ -78,12 +78,19 @@ describe('decideVerdict', () => {
 
   it('B: 似ている候補を類似度の高い順に最大 5 件。低い候補は含めない', () => {
     const many = Array.from({ length: 8 }, (_, i) => product(`p${i}`, withImage));
-    const js = many.map((_, i) => j({ index: i, similarity: 0.3 + i / 10 }));
+    const js = many.map((_, i) => j({ index: i, similarity: 0.15 + i / 10 }));
     const r = decideVerdict({ brandRead: null, candidates: many, judgements: js });
     expect(r.verdict).toBe('candidates');
     expect(r.candidates).toHaveLength(5);
     expect(r.candidates[0]?.matchScore).toBeGreaterThanOrEqual(r.candidates[4]!.matchScore);
-    expect(r.candidates.every((c) => c.matchScore >= 0.4)).toBe(true);
+    expect(r.candidates.every((c) => c.matchScore >= 0.25)).toBe(true);
+  });
+
+  it('B の足切りは 0.25: 0.25 は含め、0.24 は含めない', () => {
+    const inc = decideVerdict({ brandRead: null, candidates: cands, judgements: [j({ similarity: 0.25 })] });
+    expect(inc.verdict).toBe('candidates');
+    const exc = decideVerdict({ brandRead: null, candidates: cands, judgements: [j({ similarity: 0.24 })] });
+    expect(exc.verdict).toBe('unidentified');
   });
 
   it('C: 似ている候補が無い、または候補が無い', () => {
