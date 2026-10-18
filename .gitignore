@@ -20,3 +20,6 @@ apps/api/eval/
 
 # 使用量の記録(実行時に生成。コミットしない)
 apps/api/data/
+
+# visual companion
+.superpowers/
