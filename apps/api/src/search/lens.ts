@@ -77,14 +77,14 @@ export class LensSearcher {
     const hit = cache.get(key);
     if (hit) return { status: 'ok', products: hit, calls: 0 };
 
-    // アップロードと検索の 2 回分(月間・1 時間)が残っていなければ始めない。1 回目の予約は await の前に行う。
-    // 429 の直後(冷却中)も始めない。
+    // アップロードと検索の 2 回分(月間・1 時間)が残っていなければ始めない。2 回分の予約は await の前に行う
+    // (同時に来た別のリクエストが、同じ空きを重ねて使わないようにするため)。429 の直後(冷却中)も始めない。
     const used = store.monthly(now).serpapi;
     if (store.serpapiCoolingDown(now) || used + 2 > monthlyLimit || store.serpapiLastHour(now) + 2 > this.deps.hourlyLimit) {
       return { status: 'budget_exhausted', products: [], calls: 0 };
     }
-    store.addSerpapi(now, 1);
-    this.warnIfNearLimit(used + 1);
+    store.addSerpapi(now, 2);
+    this.warnIfNearLimit(used + 2);
 
     const form = new FormData();
     form.append('image', new Blob([jpeg as Uint8Array<ArrayBuffer>], { type: 'image/jpeg' }), 'item.jpg');
@@ -94,8 +94,12 @@ export class LensSearcher {
     const id = UploadResponse.safeParse(upload.value);
     if (!id.success) return { status: 'failed', products: [], calls: 1, detail: 'upload_parse' };
 
-    store.addSerpapi(now, 1);
-    this.warnIfNearLimit(used + 2);
+    // 検索の前に冷却が始まっていたら(並行するリクエストが 429 を受けた)、検索には進まず、使わない 1 回分を戻す。
+    // アップロードは課金されうるので、アップロードが失敗したときは(上で)戻さない。
+    if (store.serpapiCoolingDown(this.clock())) {
+      store.refundSerpapi(now, 1);
+      return { status: 'budget_exhausted', products: [], calls: 1 };
+    }
     const params = new URLSearchParams({
       engine: 'google_lens',
       image_id: id.data.image_id,

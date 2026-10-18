@@ -172,12 +172,14 @@ describe('LensSearcher', () => {
     expect(store.monthly(NOW).serpapi).toBe(4);
   });
 
-  it('アップロードの HTTP エラーは failed(detail)。検索はせず、アップロード分だけ数える', async () => {
+  it('アップロードの HTTP エラーは failed(detail)。検索はせず、予約した 2 回分は戻さない', async () => {
     const f = fakeFetch({ ok: false, status: 429, body: {} }, { body: {} });
     const { s, store } = make(f);
     expect(await s.searchByImage(JPEG)).toEqual({ status: 'failed', products: [], calls: 1, detail: 'upload_http_429' });
     expect(f.calls).toHaveLength(1);
-    expect(store.monthly(NOW).serpapi).toBe(1);
+    // 最初に 2 回分を予約している。アップロードは課金されうるので、失敗しても戻さない。
+    expect(store.monthly(NOW).serpapi).toBe(2);
+    expect(store.serpapiLastHour(NOW)).toBe(2);
   });
 
   it('アップロードの応答に image_id が無ければ failed(upload_parse)', async () => {
@@ -349,6 +351,57 @@ describe('LensSearcher', () => {
       expect((await s.searchByImage(JPEG)).status).toBe('ok');
       expect(await s.searchByImage(new Uint8Array([3]))).toEqual({ status: 'budget_exhausted', products: [], calls: 0 });
       expect(f.calls).toHaveLength(2);
+    });
+  });
+  describe('最初に 2 回分を予約する', () => {
+    it('アップロードの前に、月間と 1 時間の両方で 2 回分を予約している', async () => {
+      const seen: number[][] = [];
+      let storeRef: ReturnType<typeof make>['store'] | undefined;
+      const f = (async (url: string) => {
+        if (url.startsWith('https://serpapi.com/image')) {
+          seen.push([storeRef!.monthly(NOW).serpapi, storeRef!.serpapiLastHour(NOW)]);
+          return { ok: true, status: 200, json: async () => UPLOAD_OK };
+        }
+        return { ok: true, status: 200, json: async () => ({ visual_matches: [] }) };
+      }) as UploadFetchLike;
+      const { s, store } = make(f);
+      storeRef = store;
+      await s.searchByImage(JPEG);
+      expect(seen).toEqual([[2, 2]]);
+      expect(store.monthly(NOW).serpapi).toBe(2);
+    });
+
+    it('同時に 2 件来ても、月間の残りが 3 回なら 2 件目は始めない(1 件目は 2 回分を予約済み)', async () => {
+      const f = fakeFetch({ body: UPLOAD_OK }, { body: { visual_matches: [] } });
+      const { s, store } = make(f, { limit: 3 });
+      const rs = await Promise.all([s.searchByImage(new Uint8Array([1])), s.searchByImage(new Uint8Array([2]))]);
+      expect(rs.map((r) => r.status).sort()).toEqual(['budget_exhausted', 'ok']);
+      expect(f.calls).toHaveLength(2);
+      expect(store.monthly(NOW).serpapi).toBe(2);
+    });
+
+    it('同時に 2 件来ても、1 時間の残りが 3 回なら 2 件目は始めない', async () => {
+      const f = fakeFetch({ body: UPLOAD_OK }, { body: { visual_matches: [] } });
+      const { s } = make(f, { hourly: 3 });
+      const rs = await Promise.all([s.searchByImage(new Uint8Array([1])), s.searchByImage(new Uint8Array([2]))]);
+      expect(rs.map((r) => r.status).sort()).toEqual(['budget_exhausted', 'ok']);
+      expect(f.calls).toHaveLength(2);
+    });
+
+    it('アップロード中に冷却が始まって検索に進まないときは、使わなかった 1 回分を戻す', async () => {
+      let storeRef: ReturnType<typeof make>['store'] | undefined;
+      const calls: string[] = [];
+      const f = (async (url: string) => {
+        calls.push(url);
+        storeRef!.markSerpapiRateLimited(NOW); // 並行する別のリクエストが 429 を受けた
+        return { ok: true, status: 200, json: async () => UPLOAD_OK };
+      }) as UploadFetchLike;
+      const { s, store } = make(f);
+      storeRef = store;
+      expect(await s.searchByImage(JPEG)).toEqual({ status: 'budget_exhausted', products: [], calls: 1 });
+      expect(calls).toHaveLength(1);
+      expect(store.monthly(NOW).serpapi).toBe(1);
+      expect(store.serpapiLastHour(NOW)).toBe(1);
     });
   });
 });
