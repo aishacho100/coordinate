@@ -149,6 +149,13 @@ describe('decideVerdict', () => {
       expect(r.verdict).toBe('unidentified');
     });
 
+    it('A の類似度の下限は 0.7。0.69 は B、0.7 は A', () => {
+      const low = ident('Nike', 'NIKE エアフォース1', { similarity: 0.69 });
+      expect(low.verdict).toBe('candidates');
+      expect(low.candidates[0]?.matchType).toBe('similar');
+      expect(ident('Nike', 'NIKE エアフォース1', { similarity: 0.7 }).verdict).toBe('identified');
+    });
+
     it('1 位が条件を満たさなくても、条件を満たす下位の候補があれば A はそれになる', () => {
       const r = decideVerdict({
         brandRead: 'Nike',

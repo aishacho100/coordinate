@@ -14,6 +14,8 @@ export type Judgement = {
 
 /** B に含める最低の類似度。Claude の自己申告であり、確率ではない。 */
 export const MIN_SIMILARITY = 0.4;
+/** A に必要な最低の類似度。B より厳しくする。 */
+export const MIN_IDENTICAL_SIMILARITY = 0.7;
 export const MAX_CANDIDATES = 5;
 
 /** 有限でない値(NaN・Infinity)は 0 として扱い、0〜1 に収める。 */
@@ -22,7 +24,7 @@ const clampSimilarity = (v: number) => (Number.isFinite(v) ? Math.min(Math.max(v
 /**
  * A・B・C を決める。A は「写真の文字からブランドを読み取れている」「候補名に同じブランドが語として現れる」
  * 「候補に画像がある」「画像が同一商品と判断された」「名前や型番が読み取れた文字・特徴と合う」を全部満たすときだけ。
- * (加えて、類似度が B の下限以上であること。)
+ * (加えて、類似度が A 専用の下限 MIN_IDENTICAL_SIMILARITY 以上であること。)
  */
 export function decideVerdict(input: {
   brandRead: string | null;
@@ -45,7 +47,7 @@ export function decideVerdict(input: {
     product.imageUrl !== undefined &&
     judgement.sameProduct &&
     judgement.nameMatchesFeatures &&
-    judgement.similarity >= MIN_SIMILARITY;
+    judgement.similarity >= MIN_IDENTICAL_SIMILARITY;
 
   const toCandidate = (e: (typeof valid)[number], identical: boolean): IdentifyCandidate => ({
     product: e.product,
