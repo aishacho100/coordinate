@@ -5,7 +5,7 @@ import type { DetectorImage, Product, Usage } from '@coordinate/shared';
 
 import type { Effort } from '../config';
 import type { MessagesClient } from '../detector/claude-vision-detector';
-import { isAllowedImageUrl } from '../search/image-url';
+import type { FetchedImage } from '../search/fetch-image';
 import type { Judgement } from './verdict';
 
 export class ComparisonError extends Error {
@@ -62,15 +62,45 @@ For each candidate (identified by its index) return:
 - unconfirmed: short Japanese phrases for what could not be confirmed (for example 型番, 素材, サイズ).
 Be strict. A product page existing is not evidence of identity. Return one result per candidate.`;
 
+/** 画像取得の同時実行数。 */
+const FETCH_CONCURRENCY = 4;
+
+export type ImageFetcher = (url: string) => Promise<FetchedImage | null>;
+
+/** 最大 limit 件ずつ並列に実行し、結果は入力と同じ順で返す。 */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 export class Comparer {
   constructor(
     private readonly client: MessagesClient,
     private readonly model: string,
     private readonly effort: Effort,
+    /** 候補の画像をサーバーが取得する。Claude には URL を渡さず、取得できた画像だけを base64 で渡す。 */
+    private readonly fetchImage: ImageFetcher,
   ) {}
 
   async compare(image: DetectorImage, candidates: Product[]): Promise<{ judgements: Judgement[]; usage: Usage }> {
     if (candidates.length === 0) return { judgements: [], usage: { inputTokens: 0, outputTokens: 0 } };
+
+    const images = await mapLimit(candidates, FETCH_CONCURRENCY, async (c) => {
+      if (!c.imageUrl) return null;
+      try {
+        return await this.fetchImage(c.imageUrl);
+      } catch {
+        return null;
+      }
+    });
 
     // Claude に画像として渡した候補の index。渡していない候補は同一商品と判断させない。
     const shown = new Set<number>();
@@ -84,10 +114,13 @@ export class Comparer {
     candidates.forEach((c, i) => {
       const lines = [`Candidate ${i}: ${c.name}`, c.seller ? `seller: ${c.seller}` : '', c.price ? `price: ${c.price.amount} ${c.price.currency}` : ''];
       content.push({ type: 'text', text: lines.filter(Boolean).join('\n') });
-      if (c.imageUrl && isAllowedImageUrl(c.imageUrl)) {
+      const got = images[i];
+      if (got) {
         shown.add(i);
-        // 検証した URL をそのまま渡す(正規化済みの href)。
-        content.push({ type: 'image', source: { type: 'url', url: new URL(c.imageUrl).href } });
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: got.mediaType, data: Buffer.from(got.data).toString('base64') },
+        });
       } else {
         content.push({ type: 'text', text: '(no image for this candidate)' });
       }

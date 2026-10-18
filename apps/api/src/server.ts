@@ -7,6 +7,7 @@ import { TtlCache } from './cache/ttl-cache';
 import { loadConfig } from './config';
 import { ClaudeVisionDetector } from './detector/claude-vision-detector';
 import { Comparer } from './identify/comparer';
+import { fetchImage } from './search/fetch-image';
 import { Identifier } from './identify/identifier';
 import { QueryGenerator } from './identify/query-generator';
 import { RakutenSearcher } from './search/rakuten';
@@ -30,7 +31,7 @@ let warn: (message: string) => void = (message) => console.warn(message);
 const identifier = anthropic
   ? new Identifier({
       queryGenerator: new QueryGenerator(anthropic, config.model, config.effort),
-      comparer: new Comparer(anthropic, config.model, config.effort),
+      comparer: new Comparer(anthropic, config.model, config.effort, (url) => fetchImage(url, { fetchImpl: fetch })),
       serpapi: new SerpApiSearcher({
         apiKey: config.serpapiKey,
         fetchImpl,

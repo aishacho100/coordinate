@@ -1,7 +1,24 @@
 import type { MessagesClient } from '../detector/claude-vision-detector';
 import type { Product } from '@coordinate/shared';
 
-import { Comparer, ComparisonError } from './comparer';
+import type { FetchedImage } from '../search/fetch-image';
+import { Comparer as RealComparer, ComparisonError } from './comparer';
+
+const fetched: FetchedImage = { data: new Uint8Array([9, 8, 7]), mediaType: 'image/webp' };
+/** 取得は偽物。urls に呼ばれた URL を残す。 */
+const fakeFetch = (result: FetchedImage | null | ((url: string) => FetchedImage | null) = fetched) => {
+  const f = (async (url: string) => {
+    f.urls.push(url);
+    return typeof result === 'function' ? result(url) : result;
+  }) as ((url: string) => Promise<FetchedImage | null>) & { urls: string[] };
+  f.urls = [];
+  return f;
+};
+class Comparer extends RealComparer {
+  constructor(c: MessagesClient, m: string, e: 'low', f: (url: string) => Promise<FetchedImage | null> = fakeFetch()) {
+    super(c, m, e, f);
+  }
+}
 
 const p = (name: string, imageUrl?: string): Product => ({
   source: 'rakuten',
@@ -37,14 +54,18 @@ const row = (index: number, over: Record<string, unknown> = {}) => ({
 });
 
 describe('Comparer', () => {
-  it('切り抜きと候補の画像 URL を渡し、判断を返す', async () => {
+  it('切り抜きと、サーバーが取得した候補の画像(base64)を渡し、判断を返す', async () => {
     const c = client(reply({ results: [row(0, { same_product: true, name_matches_features: true, similarity: 0.9 })] }));
-    const out = await new Comparer(c, 'm', 'low').compare(img, [p('a', 'https://thumbnail.image.rakuten.co.jp/a.jpg')]);
+    const f = fakeFetch();
+    const out = await new Comparer(c, 'm', 'low', f).compare(img, [p('a', 'https://thumbnail.image.rakuten.co.jp/a.jpg')]);
     expect(out.judgements[0]).toMatchObject({ index: 0, sameProduct: true, nameMatchesFeatures: true, similarity: 0.9 });
     expect(out.usage).toEqual({ inputTokens: 900, outputTokens: 120 });
     const content = c.calls[0].messages[0].content;
-    expect(content.filter((b: any) => b.type === 'image')).toHaveLength(2);
-    expect(content.some((b: any) => b.type === 'image' && b.source.type === 'url' && b.source.url.includes('rakuten'))).toBe(true);
+    const images = content.filter((b: any) => b.type === 'image');
+    expect(images).toHaveLength(2);
+    expect(images[1].source).toEqual({ type: 'base64', media_type: 'image/webp', data: Buffer.from(fetched.data).toString('base64') });
+    expect(images.every((b: any) => b.source.type === 'base64')).toBe(true);
+    expect(f.urls).toEqual(['https://thumbnail.image.rakuten.co.jp/a.jpg']);
   });
   it('画像が無い候補は同一とは判断させない(sameProduct を false に固定)', async () => {
     const c = client(reply({ results: [row(0, { same_product: true, name_matches_features: true })] }));
@@ -52,19 +73,48 @@ describe('Comparer', () => {
     expect(out.judgements[0]?.sameProduct).toBe(false);
     expect(c.calls[0].messages[0].content.filter((b: any) => b.type === 'image')).toHaveLength(1);
   });
-  it('許可されていないドメインの画像は Claude に渡さず、同一とも判断させない', async () => {
+  it('画像を取得できなかった候補は「(no image for this candidate)」とし、同一とも判断させない。URL は Claude に渡さない', async () => {
     const c = client(reply({ results: [row(0, { same_product: true, name_matches_features: true })] }));
-    const out = await new Comparer(c, 'm', 'low').compare(img, [p('evil', 'https://evil.example.com/a.jpg')]);
-    expect(c.calls[0].messages[0].content.filter((b: any) => b.type === 'image')).toHaveLength(1);
-    expect(JSON.stringify(c.calls[0])).not.toContain('evil.example.com');
-    // 画像 URL はあるが Claude は見ていないため、同一とは扱わない。
+    const out = await new Comparer(c, 'm', 'low', fakeFetch(null)).compare(img, [p('x', 'https://serpapi.com/images/url/a.webp')]);
+    const content = c.calls[0].messages[0].content;
+    expect(content.filter((b: any) => b.type === 'image')).toHaveLength(1);
+    expect(content.some((b: any) => b.type === 'text' && b.text === '(no image for this candidate)')).toBe(true);
+    expect(JSON.stringify(c.calls[0])).not.toContain('serpapi.com');
     expect(out.judgements[0]?.sameProduct).toBe(false);
   });
-  it('Claude に渡す画像 URL は、検証済みの正規化した URL(new URL(raw).href)にする', async () => {
-    const c = client(reply({ results: [row(0)] }));
-    await new Comparer(c, 'm', 'low').compare(img, [p('a', 'https://THUMBNAIL.image.rakuten.co.jp/a b.jpg')]);
-    const urls = c.calls[0].messages[0].content.filter((b: any) => b.type === 'image' && b.source.type === 'url').map((b: any) => b.source.url);
-    expect(urls).toEqual(['https://thumbnail.image.rakuten.co.jp/a%20b.jpg']);
+  it('画像 URL が無い候補は取得を試みない。取得できた候補と混在しても index は保たれる', async () => {
+    const c = client(reply({ results: [row(0, { same_product: true }), row(1, { same_product: true })] }));
+    const f = fakeFetch((u) => (u.includes('ok') ? fetched : null));
+    const out = await new Comparer(c, 'm', 'low', f).compare(img, [
+      p('ng', 'https://serpapi.com/images/url/ng.webp'),
+      p('ok', 'https://serpapi.com/images/url/ok.webp'),
+      p('none'),
+    ]);
+    expect(f.urls).toHaveLength(2);
+    expect(out.judgements.map((j) => j.sameProduct)).toEqual([false, true]);
+  });
+  it('画像の取得は同時に 4 件まで', async () => {
+    let cur = 0;
+    let max = 0;
+    const f = async () => {
+      cur++;
+      max = Math.max(max, cur);
+      await new Promise((r) => setTimeout(r, 10));
+      cur--;
+      return fetched;
+    };
+    const c = client(reply({ results: [] }));
+    const cands = Array.from({ length: 8 }, (_, i) => p(`n${i}`, `https://serpapi.com/images/url/${i}.webp`));
+    await new Comparer(c, 'm', 'low', f).compare(img, cands);
+    expect(max).toBe(4);
+  });
+  it('取得処理が例外を投げても、その候補は画像なしとして続行する', async () => {
+    const c = client(reply({ results: [row(0, { same_product: true })] }));
+    const f = async (): Promise<FetchedImage | null> => {
+      throw new Error('x');
+    };
+    const out = await new Comparer(c, 'm', 'low', f).compare(img, [p('a', 'https://serpapi.com/images/url/a.webp')]);
+    expect(out.judgements[0]?.sameProduct).toBe(false);
   });
   it('範囲外の index と不正な値を捨てる', async () => {
     const c = client(reply({ results: [row(5), row(0, { similarity: 7 }), row(0)] }));

@@ -19,6 +19,7 @@ import { loadConfig } from '../src/config';
 import { ClaudeVisionDetector } from '../src/detector/claude-vision-detector';
 import { containsWholeWords } from '../src/detector/normalize';
 import { Comparer } from '../src/identify/comparer';
+import { fetchImage } from '../src/search/fetch-image';
 import { Identifier } from '../src/identify/identifier';
 import { QueryGenerator } from '../src/identify/query-generator';
 import { cropRect } from '../src/image/crop-rect';
@@ -86,7 +87,7 @@ async function main() {
   const fetchImpl = (url: string, init?: { signal?: AbortSignal }) => fetch(url, init);
   const identifier = new Identifier({
     queryGenerator: new QueryGenerator(anthropic, config.model, config.effort),
-    comparer: new Comparer(anthropic, config.model, config.effort),
+    comparer: new Comparer(anthropic, config.model, config.effort, (url) => fetchImage(url, { fetchImpl: fetch })),
     serpapi: new SerpApiSearcher({
       apiKey: config.serpapiKey,
       fetchImpl,
