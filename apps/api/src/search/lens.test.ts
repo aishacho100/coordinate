@@ -50,7 +50,7 @@ const fakeFetch = (upload: Reply, search: Reply): UploadFetchLike & { calls: Cal
 
 const make = (
   fetchImpl: UploadFetchLike,
-  over: { key?: string | null; limit?: number; uploadTimeoutMs?: number; searchTimeoutMs?: number; onWarn?: (m: string) => void } = {},
+  over: { key?: string | null; limit?: number; hourly?: number; now?: () => Date; uploadTimeoutMs?: number; searchTimeoutMs?: number; onWarn?: (m: string) => void } = {},
 ) => {
   const store = new FileUsageStore(null);
   const cache = new TtlCache<Product[]>({ ttlMs: 1000, maxEntries: 10, now: () => 0 });
@@ -60,9 +60,10 @@ const make = (
     cache,
     store,
     monthlyLimit: over.limit ?? 200,
+    hourlyLimit: over.hourly ?? 45,
     uploadTimeoutMs: over.uploadTimeoutMs ?? 1000,
     searchTimeoutMs: over.searchTimeoutMs ?? 1000,
-    now: () => NOW,
+    now: over.now ?? (() => NOW),
     onWarn: over.onWarn,
   });
   return { s, store };
@@ -297,5 +298,57 @@ describe('LensSearcher', () => {
     expect(warns).toHaveLength(1);
     expect(warns[0]).toContain('80%');
     expect(warns[0]).not.toContain('KEY');
+  });
+  describe('1 時間の枠と 429 の冷却', () => {
+    it('直近 1 時間の残りが 2 回分に満たなければ budget_exhausted で、送らない', async () => {
+      const f = fakeFetch({ body: UPLOAD_OK }, { body: {} });
+      const { s, store } = make(f, { hourly: 10 });
+      store.addSerpapi(NOW, 9);
+      expect(await s.searchByImage(JPEG)).toEqual({ status: 'budget_exhausted', products: [], calls: 0 });
+      expect(f.calls).toHaveLength(0);
+      expect(store.serpapiLastHour(NOW)).toBe(9);
+    });
+
+    it('2 回分の空きがあれば進み、アップロードと検索を 1 時間の回数に 2 回と数える', async () => {
+      const f = fakeFetch({ body: UPLOAD_OK }, { body: { visual_matches: [] } });
+      const { s, store } = make(f, { hourly: 10 });
+      store.addSerpapi(NOW, 8);
+      expect((await s.searchByImage(JPEG)).status).toBe('ok');
+      expect(store.serpapiLastHour(NOW)).toBe(10);
+    });
+
+    it('アップロードで 429 なら failed(upload_http_429) で、その後 5 分間は budget_exhausted', async () => {
+      const t = NOW.getTime();
+      let offset = 0;
+      const f = fakeFetch({ ok: false, status: 429, body: {} }, { body: {} });
+      const { s } = make(f, { now: () => new Date(t + offset) });
+      expect(await s.searchByImage(JPEG)).toMatchObject({ status: 'failed', detail: 'upload_http_429' });
+      offset = 4 * 60_000;
+      expect(await s.searchByImage(new Uint8Array([5]))).toEqual({ status: 'budget_exhausted', products: [], calls: 0 });
+      expect(f.calls).toHaveLength(1);
+    });
+
+    it('検索で 429 でも冷却し、5 分後に再開する', async () => {
+      const t = NOW.getTime();
+      let offset = 0;
+      const f = fakeFetch({ body: UPLOAD_OK }, { ok: false, status: 429, body: {} });
+      const { s } = make(f, { now: () => new Date(t + offset) });
+      expect(await s.searchByImage(JPEG)).toMatchObject({ status: 'failed', detail: 'http_429' });
+      offset = 4 * 60_000;
+      expect((await s.searchByImage(new Uint8Array([5]))).status).toBe('budget_exhausted');
+      offset = 5 * 60_000;
+      expect((await s.searchByImage(new Uint8Array([5]))).status).toBe('failed');
+      expect(f.calls).toHaveLength(4);
+    });
+
+    it('Shopping 側で始まった冷却中も budget_exhausted(キャッシュには当たる)', async () => {
+      const f = fakeFetch({ body: UPLOAD_OK }, { body: { visual_matches: [row()] } });
+      const { s, store } = make(f);
+      await s.searchByImage(JPEG);
+      store.markSerpapiRateLimited(NOW);
+      expect((await s.searchByImage(JPEG)).status).toBe('ok');
+      expect(await s.searchByImage(new Uint8Array([3]))).toEqual({ status: 'budget_exhausted', products: [], calls: 0 });
+      expect(f.calls).toHaveLength(2);
+    });
   });
 });

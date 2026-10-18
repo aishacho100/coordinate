@@ -26,6 +26,8 @@ type Deps = {
   cache: TtlCache<Product[]>;
   store: UsageStore;
   monthlyLimit: number;
+  /** 直近 1 時間の上限(無料プランは 50 なので、余裕を見て 45 など)。 */
+  hourlyLimit: number;
   timeoutMs: number;
   now?: () => Date;
   /** 月間上限の 80% に達したとき 1 度だけ呼ぶ。キーや検索語は渡さない。 */
@@ -43,18 +45,20 @@ export class SerpApiSearcher implements ProductSearcher {
 
   async search(query: string): Promise<SearchOutcome> {
     const { apiKey, cache, store, monthlyLimit } = this.deps;
-    const now = (this.deps.now ?? (() => new Date()))();
+    const now = this.clock();
     if (!apiKey) return { status: 'not_configured', products: [], calls: 0 };
 
     const key = `serpapi:${query}`;
     const hit = cache.get(key);
     if (hit) return { status: 'ok', products: hit, calls: 0 };
 
-    // 上限の確認と同時に 1 回分を予約する(await をはさまないので同時実行でも超えない)。
-    // 通信に失敗しても課金されうるため、予約は戻さない。
+    // 上限(月間・1 時間)の確認と同時に 1 回分を予約する(await をはさまないので同時実行でも超えない)。
+    // 通信に失敗しても課金されうるため、予約は戻さない。429 の直後(冷却中)は送らない。
     const used = store.monthly(now).serpapi;
-    if (used >= monthlyLimit) return { status: 'budget_exhausted', products: [], calls: 0 };
-    store.addMonthly(now, { serpapi: 1 });
+    if (store.serpapiCoolingDown(now) || used >= monthlyLimit || store.serpapiLastHour(now) >= this.deps.hourlyLimit) {
+      return { status: 'budget_exhausted', products: [], calls: 0 };
+    }
+    store.addSerpapi(now, 1);
     this.warnIfNearLimit(used + 1);
 
     const params = new URLSearchParams({
@@ -74,6 +78,7 @@ export class SerpApiSearcher implements ProductSearcher {
     let timedOut = false;
     try {
       const res = await this.deps.fetchImpl(`https://serpapi.com/search.json?${params}`, { signal: controller.signal });
+      if (res.status === 429) store.markSerpapiRateLimited(this.clock());
       if (!res.ok) return { status: 'failed', products: [], calls: 1, detail: `http_${res.status}` };
       body = await res.json();
     } catch {
@@ -107,6 +112,10 @@ export class SerpApiSearcher implements ProductSearcher {
     }
     cache.set(key, products);
     return { status: 'ok', products, calls: 1 };
+  }
+
+  private clock(): Date {
+    return (this.deps.now ?? (() => new Date()))();
   }
 
   private warnIfNearLimit(usedAfter: number): void {

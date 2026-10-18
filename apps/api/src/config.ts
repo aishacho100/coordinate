@@ -22,6 +22,8 @@ export type Config = {
     identifyPerInstallPerDay: number;
     identifyPerIpPerDay: number;
     serpapiMonthly: number;
+    /** SerpApi の 1 時間あたりの検索回数の上限(無料プランは 50)。余裕を見て既定は 45。 */
+    serpapiHourlyLimit: number;
     searchTimeoutMs: number;
     /** Lens のアップロード・検索の個別の制限(検索は 15 秒を超えることがある)。 */
     lensUploadTimeoutMs: number;
@@ -77,6 +79,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       identifyPerInstallPerDay: perInstall,
       identifyPerIpPerDay: perInstall * 3,
       serpapiMonthly: positiveNumber(env.SERPAPI_MONTHLY_LIMIT) ?? 200,
+      serpapiHourlyLimit: positiveNumber(env.SERPAPI_HOURLY_LIMIT) ?? 45,
       searchTimeoutMs: 15_000,
       lensUploadTimeoutMs: Math.min(positiveNumber(env.LENS_UPLOAD_TIMEOUT_SECONDS) ?? 15, MAX_LENS_TIMEOUT_SECONDS) * 1000,
       lensSearchTimeoutMs: Math.min(positiveNumber(env.LENS_SEARCH_TIMEOUT_SECONDS) ?? 45, MAX_LENS_TIMEOUT_SECONDS) * 1000,

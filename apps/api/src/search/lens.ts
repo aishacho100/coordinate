@@ -45,6 +45,8 @@ type Deps = {
   cache: TtlCache<Product[]>;
   store: UsageStore;
   monthlyLimit: number;
+  /** 直近 1 時間の上限(無料プランは 50 なので、余裕を見て 45 など)。 */
+  hourlyLimit: number;
   /** アップロードの制限(ミリ秒)。 */
   uploadTimeoutMs: number;
   /** 検索の制限(ミリ秒)。Lens の検索は 15 秒を超えることがある。 */
@@ -68,17 +70,20 @@ export class LensSearcher {
 
   async searchByImage(jpeg: Uint8Array): Promise<SearchOutcome> {
     const { apiKey, cache, store, monthlyLimit } = this.deps;
-    const now = (this.deps.now ?? (() => new Date()))();
+    const now = this.clock();
     if (!apiKey) return { status: 'not_configured', products: [], calls: 0 };
 
     const key = `lens:${createHash('sha256').update(jpeg).digest('hex')}`;
     const hit = cache.get(key);
     if (hit) return { status: 'ok', products: hit, calls: 0 };
 
-    // アップロードと検索の 2 回分が残っていなければ始めない。1 回目の予約は await の前に行う。
+    // アップロードと検索の 2 回分(月間・1 時間)が残っていなければ始めない。1 回目の予約は await の前に行う。
+    // 429 の直後(冷却中)も始めない。
     const used = store.monthly(now).serpapi;
-    if (used + 2 > monthlyLimit) return { status: 'budget_exhausted', products: [], calls: 0 };
-    store.addMonthly(now, { serpapi: 1 });
+    if (store.serpapiCoolingDown(now) || used + 2 > monthlyLimit || store.serpapiLastHour(now) + 2 > this.deps.hourlyLimit) {
+      return { status: 'budget_exhausted', products: [], calls: 0 };
+    }
+    store.addSerpapi(now, 1);
     this.warnIfNearLimit(used + 1);
 
     const form = new FormData();
@@ -89,7 +94,7 @@ export class LensSearcher {
     const id = UploadResponse.safeParse(upload.value);
     if (!id.success) return { status: 'failed', products: [], calls: 1, detail: 'upload_parse' };
 
-    store.addMonthly(now, { serpapi: 1 });
+    store.addSerpapi(now, 1);
     this.warnIfNearLimit(used + 2);
     const params = new URLSearchParams({
       engine: 'google_lens',
@@ -146,6 +151,7 @@ export class LensSearcher {
     }, timeoutMs);
     try {
       const res = await this.deps.fetchImpl(url, { ...init, signal: controller.signal });
+      if (res.status === 429) this.deps.store.markSerpapiRateLimited(this.clock());
       if (!res.ok) return { ok: false, detail: `${prefix}http_${res.status}` };
       return { ok: true, value: await res.json() };
     } catch {
@@ -153,6 +159,10 @@ export class LensSearcher {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private clock(): Date {
+    return (this.deps.now ?? (() => new Date()))();
   }
 
   private warnIfNearLimit(usedAfter: number): void {

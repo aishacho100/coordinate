@@ -60,9 +60,14 @@ describe('loadConfig: 商品検索', () => {
       lensUploadTimeoutMs: 15_000,
       lensSearchTimeoutMs: 45_000,
       identifyDeadlineMs: 100_000,
+      serpapiHourlyLimit: 45,
     });
     expect(c.serpapiCostPerSearchUsd).toBeNull();
     expect(c.usageFile).toBe('data/usage.json');
+  });
+  it('SERPAPI_HOURLY_LIMIT は正の数のみ。既定は 45', () => {
+    expect(loadConfig({ SERPAPI_HOURLY_LIMIT: '30' }).limits.serpapiHourlyLimit).toBe(30);
+    for (const bad of ['0', '-1', 'x', '']) expect(loadConfig({ SERPAPI_HOURLY_LIMIT: bad }).limits.serpapiHourlyLimit).toBe(45);
   });
   it('IDENTIFY_DEADLINE_SECONDS は正の数のみ。上限は 150 秒、不正なら既定の 100 秒', () => {
     expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: '90' }).limits.identifyDeadlineMs).toBe(90_000);

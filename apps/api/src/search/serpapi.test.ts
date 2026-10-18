@@ -27,7 +27,14 @@ const okFetch = (rows: unknown[]): FetchLike & { urls: string[] } => {
 };
 const make = (
   fetchImpl: FetchLike,
-  over: { key?: string | null; limit?: number; timeoutMs?: number; onWarn?: (message: string) => void } = {},
+  over: {
+    key?: string | null;
+    limit?: number;
+    hourly?: number;
+    timeoutMs?: number;
+    onWarn?: (message: string) => void;
+    now?: () => Date;
+  } = {},
 ) => {
   const store = new FileUsageStore(null);
   const cache = new TtlCache<Product[]>({ ttlMs: 1000, maxEntries: 10, now: () => 0 });
@@ -37,8 +44,9 @@ const make = (
     cache,
     store,
     monthlyLimit: over.limit ?? 200,
+    hourlyLimit: over.hourly ?? 45,
     timeoutMs: over.timeoutMs ?? 1000,
-    now: () => NOW,
+    now: over.now ?? (() => NOW),
     onWarn: over.onWarn,
   });
   return { s, store };
@@ -184,5 +192,68 @@ describe('SerpApiSearcher', () => {
     expect(warns).toHaveLength(1);
     expect(warns[0]).not.toContain('KEY');
     expect(warns[0]).not.toContain('secret-query');
+  });
+  describe('1 時間の枠と 429 の冷却', () => {
+    it('直近 1 時間の回数が上限に達していたら budget_exhausted で、送らない', async () => {
+      const f = okFetch([row()]);
+      const { s, store } = make(f, { hourly: 3 });
+      store.addSerpapi(NOW, 3);
+      expect((await s.search('q')).status).toBe('budget_exhausted');
+      expect(f.urls).toHaveLength(0);
+    });
+
+    it('送るたびに 1 時間の回数も増え、上限に達したら止まる。1 時間後には再び送れる', async () => {
+      let t = NOW.getTime();
+      const f = okFetch([row()]);
+      const { s, store } = make(f, { hourly: 2, now: () => new Date(t) });
+      expect((await s.search('a')).status).toBe('ok');
+      expect((await s.search('b')).status).toBe('ok');
+      expect(store.serpapiLastHour(new Date(t))).toBe(2);
+      expect((await s.search('c')).status).toBe('budget_exhausted');
+      t += 61 * 60_000;
+      expect((await s.search('c')).status).toBe('ok');
+    });
+
+    it('Lens など他の呼び出しも同じ 1 時間の枠で数える', async () => {
+      const f = okFetch([row()]);
+      const { s, store } = make(f, { hourly: 2 });
+      store.addSerpapi(NOW, 2);
+      expect((await s.search('q')).status).toBe('budget_exhausted');
+    });
+
+    it('HTTP 429 は failed(http_429)。その後 5 分間は budget_exhausted で送らず、5 分後に再開する', async () => {
+      let t = NOW.getTime();
+      let status = 429;
+      const calls: string[] = [];
+      const f: FetchLike = async (url) => {
+        calls.push(url);
+        return { ok: status === 200, status, json: async () => ({ shopping_results: [row()] }) };
+      };
+      const { s } = make(f, { now: () => new Date(t) });
+      expect(await s.search('a')).toMatchObject({ status: 'failed', detail: 'http_429' });
+      status = 200;
+      t += 4 * 60_000;
+      expect((await s.search('b')).status).toBe('budget_exhausted');
+      expect(calls).toHaveLength(1);
+      t += 60_000;
+      expect((await s.search('b')).status).toBe('ok');
+    });
+
+    it('冷却中でもキャッシュには当たる', async () => {
+      const f = okFetch([row()]);
+      const { s, store } = make(f);
+      await s.search('q');
+      store.markSerpapiRateLimited(NOW);
+      expect((await s.search('q')).status).toBe('ok');
+    });
+
+    it('429 以外の HTTP エラーでは冷却しない', async () => {
+      let status = 500;
+      const f: FetchLike = async () => ({ ok: status === 200, status, json: async () => ({ shopping_results: [] }) });
+      const { s } = make(f);
+      await s.search('a');
+      status = 200;
+      expect((await s.search('b')).status).toBe('ok');
+    });
   });
 });
