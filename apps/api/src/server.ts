@@ -10,6 +10,8 @@ import { Comparer } from './identify/comparer';
 import { fetchImage } from './search/fetch-image';
 import { Identifier } from './identify/identifier';
 import { QueryGenerator } from './identify/query-generator';
+import { prepareForLens } from './image/prepare-lens';
+import { LensSearcher } from './search/lens';
 import { RakutenSearcher } from './search/rakuten';
 import { SerpApiSearcher } from './search/serpapi';
 import { FileUsageStore } from './usage/usage-store';
@@ -32,6 +34,18 @@ const identifier = anthropic
   ? new Identifier({
       queryGenerator: new QueryGenerator(anthropic, config.model, config.effort),
       comparer: new Comparer(anthropic, config.model, config.effort, (url) => fetchImage(url, { fetchImpl: fetch })),
+      lens: config.lensEnabled
+        ? new LensSearcher({
+            apiKey: config.serpapiKey,
+            fetchImpl: (url, init) => fetch(url, init),
+            cache: cache(),
+            store: usageStore,
+            monthlyLimit: config.limits.serpapiMonthly,
+            timeoutMs: config.limits.searchTimeoutMs,
+            onWarn: (message) => warn(message),
+          })
+        : null,
+      prepareLens: prepareForLens,
       serpapi: new SerpApiSearcher({
         apiKey: config.serpapiKey,
         fetchImpl,

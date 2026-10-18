@@ -25,6 +25,8 @@ import { QueryGenerator } from '../src/identify/query-generator';
 import { cropRect } from '../src/image/crop-rect';
 import { prepareForModel } from '../src/image/prepare-image';
 import { validateImage } from '../src/image/validate-image';
+import { prepareForLens } from '../src/image/prepare-lens';
+import { LensSearcher } from '../src/search/lens';
 import { RakutenSearcher } from '../src/search/rakuten';
 import { SerpApiSearcher } from '../src/search/serpapi';
 import { estimateCostUsd } from '../src/usage';
@@ -65,6 +67,8 @@ async function main() {
     `楽天キー: ${config.rakuten ? '設定あり' : '未設定(楽天は使えません)'} / アフィリエイト ID: ${config.rakuten?.affiliateId ? '設定あり' : '未設定'}`,
   );
   console.log(`SerpApi の検索の上限(この実行): ${maxSearches} 回`);
+  const consent = process.env.EVAL_CONSENT === '1';
+  console.log(`画像検索(Lens): ${consent ? '同意あり(EVAL_CONSENT=1)' : '同意なし(使いません。使うには EVAL_CONSENT=1)'}`);
 
   const dir = join(__dirname, '..', 'eval', 'photos');
   let files: string[] = [];
@@ -88,6 +92,19 @@ async function main() {
   const identifier = new Identifier({
     queryGenerator: new QueryGenerator(anthropic, config.model, config.effort),
     comparer: new Comparer(anthropic, config.model, config.effort, (url) => fetchImage(url, { fetchImpl: fetch })),
+    // 画像検索は EVAL_CONSENT=1 のときだけ実行する(consent を渡す)。Lens の呼び出しも --max-searches に含まれる。
+    lens: config.lensEnabled
+      ? new LensSearcher({
+          apiKey: config.serpapiKey,
+          fetchImpl: (url, init) => fetch(url, init),
+          cache: cache(),
+          store: usageStore,
+          monthlyLimit: maxSearches,
+          timeoutMs: config.limits.searchTimeoutMs,
+          onWarn: (message) => console.warn(message),
+        })
+      : null,
+    prepareLens: prepareForLens,
     serpapi: new SerpApiSearcher({
       apiKey: config.serpapiKey,
       fetchImpl,
@@ -117,6 +134,7 @@ async function main() {
   let costSum = 0;
   let costCount = 0;
   let serpCalls = 0;
+  let lensCalls = 0;
   let rakutenCalls = 0;
   let identifyIn = 0;
   let identifyOut = 0;
@@ -159,11 +177,13 @@ async function main() {
           claimed !== null && item.appearance.visibleText.some((t) => containsWholeWords(claimed, t));
 
         const r: IdentifyResponse = await identifier.identify(image, item, {
+          consent,
           onSearchFailure: (provider, detail) => failures.push(`${provider}:${detail}`),
         });
         identified += 1;
         verdicts[r.verdict] += 1;
         serpCalls += r.usage.serpapiSearches;
+        lensCalls += r.usage.lensSearches;
         rakutenCalls += r.usage.rakutenCalls;
         identifyIn += r.usage.claude.inputTokens;
         identifyOut += r.usage.claude.outputTokens;
@@ -177,6 +197,7 @@ async function main() {
           verdict: r.verdict,
           candidates: r.candidates.length,
           top: clip(r.candidates[0]?.product.name ?? '-', 40),
+          lens: r.searches.lens,
           serpapi: r.searches.serpapi,
           rakuten: r.searches.rakuten,
           searchFailures: failures.join(', ') || '-',
@@ -219,7 +240,7 @@ async function main() {
   console.log(
     `1 アイテムあたりの平均原価: ${costCount > 0 ? `$${(costSum / costCount).toFixed(4)}(${costCount} 件)` : '- (PRICE_INPUT_PER_MTOK / PRICE_OUTPUT_PER_MTOK が未設定)'}`,
   );
-  console.log(`SerpApi の合計: ${serpCalls} 回 / 楽天の合計: ${rakutenCalls} 回`);
+  console.log(`SerpApi(Shopping)の合計: ${serpCalls} 回 / Lens(アップロード含む)の合計: ${lensCalls} 回 / 楽天の合計: ${rakutenCalls} 回`);
   console.log(
     `Claude の合計トークン: 特定 in ${identifyIn} / out ${identifyOut}、検出 in ${detectIn} / out ${detectOut}(合計 ${identifyIn + identifyOut + detectIn + detectOut})`,
   );
@@ -237,7 +258,9 @@ async function main() {
         identifiedItems: identified,
         verdicts,
         averageCostUsd: costCount > 0 ? costSum / costCount : null,
+        consent,
         serpapiCalls: serpCalls,
+        lensCalls,
         rakutenCalls,
         tokens: { identify: { in: identifyIn, out: identifyOut }, detect: { in: detectIn, out: detectOut } },
         rows,

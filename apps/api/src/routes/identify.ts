@@ -84,12 +84,16 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
       return sendError(reply, 400, 'invalid_image');
     }
 
+    // 画像検索(Lens)への同意。ヘッダーが文字列 '1' のときだけ有効(それ以外は画像を外部に送らない)。
+    const consent = req.headers['x-image-search-consent'] === '1';
+
     // 検索の失敗理由(種類のみ。キー・URL・検索語は含まれない)。
     const searchFailures: string[] = [];
     let result;
     try {
       // Claude の使用量は、応答を受け取るたびに計上する(後続の処理が失敗しても課金されるため)。
       result = await deps.identifier.identify(image, item, {
+        consent,
         onSearchFailure: (provider, detail) => searchFailures.push(`${provider}:${detail}`),
         onUsage: (u) =>
           safely('monthly usage failed', () => store.addMonthly(now, { claudeInput: u.inputTokens, claudeOutput: u.outputTokens }), undefined),
@@ -105,6 +109,8 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
     req.log.info(
       {
         verdict: result.verdict,
+        consent,
+        lens: result.searches.lens,
         searches: result.searches,
         comparison: result.comparison,
         searchFailures,

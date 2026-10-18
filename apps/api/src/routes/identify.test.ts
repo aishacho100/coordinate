@@ -59,6 +59,19 @@ describe('POST /v1/identify', () => {
     expect(identifier.calls).toBe(1);
     await app.close();
   });
+  it('x-image-search-consent が文字列 "1" のときだけ consent=true を渡す', async () => {
+    const seen: unknown[] = [];
+    const identifier = {
+      identify: async (_i: unknown, _item: unknown, opts: { consent?: boolean } = {}) => (seen.push(opts.consent), response),
+    };
+    const app = buildApp({ config, detector: null, identifier, usageStore: new FileUsageStore(null) });
+    const img = await checkerJpeg();
+    for (const h of <Record<string, string>[]>[{ 'x-image-search-consent': '1' }, {}, { 'x-image-search-consent': '0' }, { 'x-image-search-consent': 'true' }]) {
+      expect((await post(app, img, { item: itemJson }, { ...install, ...h })).statusCode).toBe(200);
+    }
+    expect(seen).toEqual([true, false, false, false]);
+    await app.close();
+  });
   it('識別器が無ければ 503 not_configured', async () => {
     const app = buildApp({ config, detector: null, identifier: null, usageStore: new FileUsageStore(null) });
     const res = await post(app, await checkerJpeg(), { item: itemJson }, install);
