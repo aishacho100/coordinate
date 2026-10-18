@@ -42,6 +42,17 @@ jest.mock('@/lib/identify-api', () => ({
   identifyItem: (...args: unknown[]) => mockIdentifyItem(...args),
 }));
 
+let mockConsent: 'granted' | 'declined' | 'unset' = 'declined';
+jest.mock('@/lib/image-search-consent', () => ({
+  getImageSearchConsent: async () => mockConsent,
+  setImageSearchConsent: async (v: 'granted' | 'declined') => {
+    mockConsent = v;
+  },
+  clearImageSearchConsent: async () => {
+    mockConsent = 'unset';
+  },
+}));
+
 const withProvider = (ui: ReactElement) => (
   <EditorProvider>
     <AnalysisProvider>{ui}</AnalysisProvider>
@@ -60,6 +71,7 @@ const withPhoto = (ui: ReactElement) => (
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockConsent = 'declined';
 });
 
 describe('ホーム', () => {
@@ -269,7 +281,7 @@ describe('認識結果画面', () => {
       fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
       expect(await screen.findByText('探しています')).toBeTruthy();
       expect(mockCropItem).toHaveBeenCalledWith({ uri: 'file:///a.jpg', width: 3000, height: 4000 }, detected.box);
-      await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected));
+      await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected, { imageSearchConsent: false }));
       resolve(identified);
       expect(await screen.findByText('候補が見つかりました')).toBeTruthy();
       expect(screen.getByText('¥7,590')).toBeTruthy();
@@ -324,6 +336,84 @@ describe('認識結果画面', () => {
       fireEvent.press(screen.getByLabelText('探しています'));
       await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledTimes(1));
       expect(mockCropItem).toHaveBeenCalledTimes(1);
+    });
+
+    describe('画像検索の同意', () => {
+      const twoAiState = (): AnalysisState => {
+        const base = aiState();
+        const second = { ...detected, id: 'h', categoryId: 'hat' };
+        return {
+          ...(base as Extract<AnalysisState, { status: 'done' }>),
+          items: [
+            base.status === 'done' ? base.items[0]! : (undefined as never),
+            { id: 'h', categoryId: 'hat', brand: '', box: second.box, origin: 'ai', level: 'medium', detected: second, identify: { status: 'idle' } },
+          ],
+        };
+      };
+
+      it('未設定なら検索せず、そのアイテムのカードに同意の説明を出す(他のアイテムは変えない)', async () => {
+        mockConsent = 'unset';
+        renderResult(twoAiState());
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+        expect(await screen.findByText(/切り抜いた画像を外部の画像検索\(SerpApi・Google\)に送ります/)).toBeTruthy();
+        expect(screen.getByLabelText('同意して探す')).toBeTruthy();
+        expect(screen.getByLabelText('画像を送らずに探す')).toBeTruthy();
+        expect(screen.queryByLabelText('Tシャツの商品を探す')).toBeNull();
+        expect(screen.getByLabelText('帽子の商品を探す')).toBeTruthy();
+        expect(mockIdentifyItem).not.toHaveBeenCalled();
+        expect(mockCropItem).not.toHaveBeenCalled();
+      });
+
+      it('「同意して探す」で granted を保存し、consent ありで検索する', async () => {
+        mockConsent = 'unset';
+        mockIdentifyItem.mockResolvedValue(identified);
+        renderResult(aiState());
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+        fireEvent.press(await screen.findByLabelText('同意して探す'));
+        expect(await screen.findByText('候補が見つかりました')).toBeTruthy();
+        expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected, { imageSearchConsent: true });
+        expect(mockConsent).toBe('granted');
+      });
+
+      it('「画像を送らずに探す」で declined を保存し、consent なしで検索する', async () => {
+        mockConsent = 'unset';
+        mockIdentifyItem.mockResolvedValue(identified);
+        renderResult(aiState());
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+        fireEvent.press(await screen.findByLabelText('画像を送らずに探す'));
+        expect(await screen.findByText('候補が見つかりました')).toBeTruthy();
+        expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected, { imageSearchConsent: false });
+        expect(mockConsent).toBe('declined');
+      });
+
+      it('保存済みならカードを出さず、その設定で即検索する', async () => {
+        mockConsent = 'granted';
+        mockIdentifyItem.mockResolvedValue(identified);
+        renderResult(aiState());
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+        await waitFor(() =>
+          expect(mockIdentifyItem).toHaveBeenCalledWith('file:///crop.jpg', detected, { imageSearchConsent: true }),
+        );
+        expect(screen.queryByLabelText('同意して探す')).toBeNull();
+      });
+
+      it('別のアイテムにも同じカードが出て、どれかで選ぶと全アイテムに反映される', async () => {
+        mockConsent = 'unset';
+        mockIdentifyItem.mockResolvedValue(identified);
+        renderResult(twoAiState());
+        fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
+        await screen.findByLabelText('同意して探す');
+        fireEvent.press(screen.getByLabelText('帽子の商品を探す'));
+        await waitFor(() => expect(screen.getAllByLabelText('同意して探す')).toHaveLength(2));
+
+        fireEvent.press(screen.getAllByLabelText('同意して探す')[0]!);
+        await screen.findByText('候補が見つかりました');
+        // 選ぶと、もう一方のカードは閉じて「商品を探す」に戻り、押せば同意ありで即検索する。
+        expect(screen.queryByLabelText('同意して探す')).toBeNull();
+        fireEvent.press(screen.getByLabelText('帽子の商品を探す'));
+        await waitFor(() => expect(mockIdentifyItem).toHaveBeenCalledTimes(2));
+        expect(mockIdentifyItem.mock.calls[1]?.[2]).toEqual({ imageSearchConsent: true });
+      });
     });
 
     it('探したあとも「この内容で編集へ」は変わらず動く', async () => {
@@ -386,6 +476,29 @@ describe('AI解析画面', () => {
 });
 
 describe('設定', () => {
+  it('画像検索の同意の状態を出し、同意済みなら取り消せる。取り消すと未設定になる', async () => {
+    mockConsent = 'granted';
+    render(<SettingsScreen />);
+    expect(screen.getByText('画像検索の同意')).toBeTruthy();
+    expect(await screen.findByText('現在の状態: 同意済み')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('同意を取り消す'));
+    expect(await screen.findByText('現在の状態: 未設定')).toBeTruthy();
+    expect(mockConsent).toBe('unset');
+    expect(screen.queryByLabelText('同意を取り消す')).toBeNull();
+  });
+
+  it('「画像は送らない」のときも取り消せ、未設定では取り消しボタンを出さない', async () => {
+    mockConsent = 'declined';
+    const { unmount } = render(<SettingsScreen />);
+    expect(await screen.findByText('現在の状態: 画像は送らない')).toBeTruthy();
+    expect(screen.getByLabelText('同意を取り消す')).toBeTruthy();
+    unmount();
+    mockConsent = 'unset';
+    render(<SettingsScreen />);
+    expect(await screen.findByText('現在の状態: 未設定')).toBeTruthy();
+    expect(screen.queryByLabelText('同意を取り消す')).toBeNull();
+  });
+
   it('AIサービスへの画像送信の説明がある', () => {
     render(<SettingsScreen />);
     expect(screen.getByText('AIサービスへの画像送信について')).toBeTruthy();

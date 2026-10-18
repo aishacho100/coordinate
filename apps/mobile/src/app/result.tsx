@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { Chip } from '@/components/controls';
+import { ImageSearchConsentCard } from '@/components/image-search-consent-card';
 import { ProductCandidates } from '@/components/product-candidates';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -19,6 +20,7 @@ import { currentCrop } from '@/features/editor/reducer';
 import { useTheme } from '@/hooks/use-theme';
 import { AnalyzeError, ERROR_MESSAGES } from '@/lib/analyze-api';
 import { identifyItem } from '@/lib/identify-api';
+import { getImageSearchConsent, setImageSearchConsent } from '@/lib/image-search-consent';
 
 const GROUPS = [
   ['clothing', '衣類'],
@@ -47,6 +49,8 @@ export default function ResultScreen() {
   const [picking, setPicking] = useState<string | null>(null);
   // 探している最中の項目。state の更新を待たずに、二重に送らないための印。
   const searching = useRef(new Set<string>());
+  // 同意のカードを出している項目。同意の値そのものは端末の保存(設定画面と共有)を押すたびに読む。
+  const [asking, setAsking] = useState<string[]>([]);
 
   if (!snapshot || state.status !== 'done') {
     return (
@@ -60,19 +64,43 @@ export default function ResultScreen() {
   const { photo } = snapshot;
   const togglePicking = (key: string) => setPicking((cur) => (cur === key ? null : key));
 
-  const search = async (it: ResultItem) => {
-    if (!it.detected || searching.current.has(it.id)) return;
-    searching.current.add(it.id);
+  /** searching に印を付けたあとで呼ぶ。終わったら印を外す。 */
+  const search = async (it: ResultItem, imageSearchConsent: boolean) => {
+    if (!it.detected) {
+      searching.current.delete(it.id);
+      return;
+    }
     dispatch({ type: 'identifyStart', id: it.id });
     try {
       const cropUri = await cropItem(photo, it.box);
-      const response = await identifyItem(cropUri, { ...it.detected, categoryId: it.categoryId });
+      const response = await identifyItem(cropUri, { ...it.detected, categoryId: it.categoryId }, { imageSearchConsent });
       dispatch({ type: 'identifySucceeded', id: it.id, response });
     } catch (e) {
       dispatch({ type: 'identifyFailed', id: it.id, kind: e instanceof AnalyzeError ? e.kind : 'identify_failed' });
     } finally {
       searching.current.delete(it.id);
     }
+  };
+
+  const requestSearch = async (it: ResultItem) => {
+    if (!it.detected || searching.current.has(it.id)) return;
+    searching.current.add(it.id);
+    const consent = await getImageSearchConsent();
+    if (consent === 'unset') {
+      searching.current.delete(it.id);
+      setAsking((cur) => (cur.includes(it.id) ? cur : [...cur, it.id]));
+      return;
+    }
+    await search(it, consent === 'granted');
+  };
+
+  const answerConsent = async (it: ResultItem, value: 'granted' | 'declined') => {
+    if (searching.current.has(it.id)) return;
+    searching.current.add(it.id);
+    await setImageSearchConsent(value);
+    // どれかで選んだら、ほかのアイテムの同意のカードも閉じる。
+    setAsking([]);
+    await search(it, value === 'granted');
   };
 
   const proceed = () => {
@@ -153,7 +181,10 @@ export default function ResultScreen() {
           }}
           onBrand={(brand) => dispatch({ type: 'setBrand', id: it.id, brand })}
           onRemove={() => dispatch({ type: 'remove', id: it.id })}
-          onSearch={() => void search(it)}
+          onSearch={() => void requestSearch(it)}
+          asking={asking.includes(it.id)}
+          onGrant={() => void answerConsent(it, 'granted')}
+          onDecline={() => void answerConsent(it, 'declined')}
         />
       ))}
 
@@ -186,6 +217,9 @@ function ItemCard({
   onBrand,
   onRemove,
   onSearch,
+  asking,
+  onGrant,
+  onDecline,
 }: {
   index: number;
   item: ResultItem;
@@ -195,6 +229,9 @@ function ItemCard({
   onBrand: (brand: string) => void;
   onRemove: () => void;
   onSearch: () => void;
+  asking: boolean;
+  onGrant: () => void;
+  onDecline: () => void;
 }) {
   const theme = useTheme();
   const name = categoryName(item.categoryId);
@@ -235,7 +272,14 @@ function ItemCard({
         </ThemedText>
       </View>
 
-      {item.detected ? <SearchSection name={name} identify={item.identify} onSearch={onSearch} /> : null}
+      {item.detected ? <SearchSection
+          name={name}
+          identify={item.identify}
+          onSearch={onSearch}
+          asking={asking}
+          onGrant={onGrant}
+          onDecline={onDecline}
+        /> : null}
 
       <View style={styles.cardFoot}>
         <Chip label="削除" accessibilityLabel={`${name}を削除`} selected={false} onPress={onRemove} />
@@ -248,12 +292,25 @@ function SearchSection({
   name,
   identify,
   onSearch,
+  asking,
+  onGrant,
+  onDecline,
 }: {
   name: string;
   identify: ResultItem['identify'];
   onSearch: () => void;
+  asking: boolean;
+  onGrant: () => void;
+  onDecline: () => void;
 }) {
   const theme = useTheme();
+  if (asking && identify.status !== 'loading') {
+    return (
+      <View style={styles.search}>
+        <ImageSearchConsentCard onGrant={onGrant} onDecline={onDecline} />
+      </View>
+    );
+  }
   if (identify.status === 'loading') {
     return (
       <View style={styles.search}>
