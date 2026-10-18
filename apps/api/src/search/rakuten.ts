@@ -15,6 +15,8 @@ const ItemSchema = z.object({
     itemCode: z.string().min(1),
     itemPrice: z.number().nonnegative().optional(),
     itemUrl: z.string().url().optional(),
+    /** affiliateId を渡したときに返る、アフィリエイト化された URL。 */
+    affiliateUrl: z.string().optional(),
     shopName: z.string().optional(),
     mediumImageUrls: z.array(z.object({ imageUrl: z.string() })).optional(),
     availability: z.number().optional(),
@@ -78,13 +80,14 @@ export class RakutenSearcher implements ProductSearcher {
       if (!r.success) continue;
       const it = r.data.Item;
       const image = it.mediumImageUrls?.[0]?.imageUrl;
+      const pageUrl = it.affiliateUrl || it.itemUrl;
       products.push({
         source: 'rakuten',
         productId: it.itemCode,
         brand: '',
         name: it.itemName,
         ...(image && isAllowedImageUrl(image) ? { imageUrl: image } : {}),
-        ...(it.itemUrl ? { pageUrl: it.itemUrl } : {}),
+        ...(pageUrl ? { pageUrl } : {}),
         // 在庫がない商品の価格は、現在の販売価格として見せない。
         ...(it.itemPrice !== undefined && it.availability !== 0
           ? { price: { amount: it.itemPrice, currency: 'JPY', kind: 'market' as const, fetchedAt } }

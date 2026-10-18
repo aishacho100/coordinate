@@ -62,6 +62,17 @@ describe('RakutenSearcher', () => {
     });
     expect(r.products[0]?.imageUrl).toContain('thumbnail.image.rakuten.co.jp');
   });
+  it('affiliateUrl があれば pageUrl に使い、無ければ itemUrl を使う', async () => {
+    const aff = 'https://hb.afl.rakuten.co.jp/ichiba/AF/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fa%2F1%2F';
+    const plain = 'https://item.rakuten.co.jp/a/1/';
+    const f = okFetch([
+      item({ itemCode: 'a:1', itemUrl: plain, affiliateUrl: aff }),
+      item({ itemCode: 'a:2', itemUrl: plain }),
+    ]);
+    const r = await make(f).search('q');
+    expect(r.products[0]?.pageUrl).toBe(aff);
+    expect(r.products[1]?.pageUrl).toBe(plain);
+  });
   it('affiliateId が無ければクエリに付けない', async () => {
     const f = okFetch([]);
     await make(f, { applicationId: 'APP', accessKey: 'AK', affiliateId: null }).search('q');
