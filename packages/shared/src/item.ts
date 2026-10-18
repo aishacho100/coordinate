@@ -81,6 +81,8 @@ export const ProductSchema = z.object({
   color: z.string().optional(),
   imageUrl: z.string().url().optional(),
   pageUrl: z.string().url().optional(),
+  /** 販売元(Google ショッピングの source など)。 */
+  seller: z.string().optional(),
   price: z
     .object({
       amount: z.number().nonnegative(),
