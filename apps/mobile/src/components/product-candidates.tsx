@@ -81,7 +81,7 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
           accessibilityRole="link"
           accessibilityLabel="Supported by Rakuten Developers"
           onPress={() => void Linking.openURL(RAKUTEN_CREDIT_URL)}
-          hitSlop={8}>
+          hitSlop={12}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.credit}>
             Supported by Rakuten Developers
           </ThemedText>
@@ -187,7 +187,7 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             accessibilityRole="link"
             accessibilityLabel={linkLabel}
             onPress={() => void Linking.openURL(product.pageUrl as string)}
-            hitSlop={8}
+            hitSlop={12}
             style={styles.link}>
             <ThemedText
               type="smallBold"
