@@ -1,5 +1,6 @@
 import type { IdentifyCandidate, IdentifyResponse, IdentifyVerdict, SearchStatus } from '@coordinate/shared';
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
@@ -139,7 +140,9 @@ function Candidate({
   onToggle?: () => void;
 }) {
   const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
   const { product, matched, unconfirmed } = candidate;
+  const hasDetail = matched.length > 0 || unconfirmed.length > 0;
   const price = product.price;
   const priceLabel = PRICE_LABEL[product.source];
   const asOf = price ? formatAsOf(price.fetchedAt) : '';
@@ -226,18 +229,9 @@ function Candidate({
             {product.seller}
           </ThemedText>
         ) : null}
-        {matched.length > 0 ? (
-          <ThemedText type="small" style={styles.fine}>{`一致した点: ${matched.join('、')}`}</ThemedText>
-        ) : null}
-        {unconfirmed.length > 0 ? (
-          <ThemedText
-            type="small"
-            themeColor="textSecondary"
-            style={styles.fine}>{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
-        ) : null}
       </View>
       </Pressable>
-      <View style={styles.body}>
+      <View style={styles.linkRow}>
         {product.pageUrl && linkLabel ? (
           <Pressable
             accessibilityRole="link"
@@ -252,8 +246,33 @@ function Candidate({
               {linkLabel}
             </ThemedText>
           </Pressable>
+        ) : (
+          <View style={styles.link} />
+        )}
+        {hasDetail ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? '閉じる' : '詳しく見る'}
+            accessibilityState={{ expanded }}
+            onPress={() => setExpanded((v) => !v)}
+            style={styles.expand}>
+            <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={20} color={theme.textSecondary} />
+          </Pressable>
         ) : null}
       </View>
+      {expanded ? (
+        <View style={styles.body}>
+          {matched.length > 0 ? (
+            <ThemedText type="small" style={styles.fine}>{`一致した点: ${matched.join('、')}`}</ThemedText>
+          ) : null}
+          {unconfirmed.length > 0 ? (
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              style={styles.fine}>{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -284,7 +303,9 @@ const styles = StyleSheet.create({
   noPrice: { flexShrink: 1, fontSize: 12 },
   mark: { minWidth: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
   fine: { fontSize: 11, lineHeight: 17, letterSpacing: 0.2 },
-  link: { alignSelf: 'flex-start', paddingTop: Spacing.one },
+  linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  link: { flexShrink: 1, alignSelf: 'center' },
+  expand: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -Spacing.two },
   linkText: { borderBottomWidth: StyleSheet.hairlineWidth * 2 },
   credit: { fontSize: 11, lineHeight: 16, letterSpacing: 0.6 },
 });

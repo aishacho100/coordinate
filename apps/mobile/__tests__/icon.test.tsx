@@ -10,4 +10,9 @@ describe('Icon', () => {
     expect(json).not.toContain('importantForAccessibility');
     expect(json).not.toContain('accessibilityElementsHidden');
   });
+
+  it('chevronDown / chevronUp を描ける', () => {
+    expect(JSON.stringify(render(<Icon name="chevronDown" />).toJSON())).toContain('"strokeWidth":1.2');
+    expect(JSON.stringify(render(<Icon name="chevronUp" />).toJSON())).toContain('"strokeWidth":1.2');
+  });
 });

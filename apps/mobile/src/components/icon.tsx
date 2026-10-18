@@ -25,7 +25,9 @@ export type IconName =
   | 'yen'
   | 'rotate'
   | 'reset'
-  | 'download';
+  | 'download'
+  | 'chevronDown'
+  | 'chevronUp';
 
 type Props = {
   name: IconName;
@@ -129,5 +131,9 @@ function shape(name: IconName) {
       return <Path d="M4.5 12a7.5 7.5 0 112.2 5.3M4.5 19.5v-4h4" />;
     case 'download':
       return <Path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" />;
+    case 'chevronDown':
+      return <Path d="M6 9.5l6 6 6-6" />;
+    case 'chevronUp':
+      return <Path d="M6 14.5l6-6 6 6" />;
   }
 }
