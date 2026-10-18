@@ -119,6 +119,27 @@ describe('POST /v1/identify', () => {
     expect(store.monthly(new Date())).toMatchObject({ claudeInput: 5, claudeOutput: 3 });
     await app.close();
   });
+  it('月間の計上や日次の上限の記録が例外を投げても、結果の返却を妨げない', async () => {
+    const real = new FileUsageStore(null);
+    const broken = {
+      monthly: real.monthly.bind(real),
+      addMonthly: () => {
+        throw new Error('disk full');
+      },
+      tryConsumeDaily: () => {
+        throw new Error('disk full');
+      },
+    } as unknown as FileUsageStore;
+    const identifier = fakeIdentifier(async (opts) => {
+      opts.onUsage?.({ inputTokens: 5, outputTokens: 3 });
+      return response;
+    });
+    const app = buildApp({ config, detector: null, identifier, usageStore: broken });
+    const res = await post(app, await checkerJpeg(), { item: itemJson }, install);
+    expect(res.statusCode).toBe(200);
+    expect(IdentifyResponseSchema.parse(res.json()).verdict).toBe('unidentified');
+    await app.close();
+  });
   it('画像でないファイルは 400 invalid_image', async () => {
     const app = buildApp({ config, detector: null, identifier: fakeIdentifier(), usageStore: new FileUsageStore(null) });
     const res = await post(app, Buffer.from('not an image'), { item: itemJson }, install);

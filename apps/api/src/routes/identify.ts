@@ -56,9 +56,19 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
     const header = req.headers['x-install-id'];
     const installId = typeof header === 'string' && INSTALL_ID.test(header) ? header : null;
     const { identifyPerInstallPerDay, identifyPerIpPerDay } = deps.config.limits;
+    // 記録の失敗(ディスクなど)で結果を妨げない。種類だけログに残す。
+    const safely = <T>(label: string, fn: () => T, fallback: T): T => {
+      try {
+        return fn();
+      } catch (e) {
+        req.log.error({ errorName: e instanceof Error ? e.name : 'unknown' }, label);
+        return fallback;
+      }
+    };
     if (
-      !store.tryConsumeDaily(now, 'ip', req.ip, identifyPerIpPerDay) ||
-      (installId && !store.tryConsumeDaily(now, 'install', installId, identifyPerInstallPerDay))
+      !safely('daily limit (ip) failed', () => store.tryConsumeDaily(now, 'ip', req.ip, identifyPerIpPerDay), true) ||
+      (installId &&
+        !safely('daily limit (install) failed', () => store.tryConsumeDaily(now, 'install', installId, identifyPerInstallPerDay), true))
     ) {
       return sendError(reply, 429, 'quota_exceeded');
     }
@@ -74,7 +84,8 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
     try {
       // Claude の使用量は、応答を受け取るたびに計上する(後続の処理が失敗しても課金されるため)。
       result = await deps.identifier.identify(image, item, {
-        onUsage: (u) => store.addMonthly(now, { claudeInput: u.inputTokens, claudeOutput: u.outputTokens }),
+        onUsage: (u) =>
+          safely('monthly usage failed', () => store.addMonthly(now, { claudeInput: u.inputTokens, claudeOutput: u.outputTokens }), undefined),
       });
     } catch (e) {
       // 画像・キー・検索語・上流の詳細はログに残さない。種類だけ記録する。
