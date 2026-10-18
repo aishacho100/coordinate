@@ -23,6 +23,9 @@ export type Config = {
     identifyPerIpPerDay: number;
     serpapiMonthly: number;
     searchTimeoutMs: number;
+    /** Lens のアップロード・検索の個別の制限(検索は 15 秒を超えることがある)。 */
+    lensUploadTimeoutMs: number;
+    lensSearchTimeoutMs: number;
   };
   /** SerpApi 1 検索あたりの概算 USD(プランの月額 ÷ 検索数)。未設定なら費用に含めない。 */
   serpapiCostPerSearchUsd: number | null;
@@ -39,6 +42,7 @@ function positiveNumber(v: string | undefined): number | null {
 }
 
 const MAX_CACHE_TTL_SECONDS = 3600;
+const MAX_LENS_TIMEOUT_SECONDS = 120;
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const key = env.ANTHROPIC_API_KEY?.trim();
@@ -71,6 +75,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       identifyPerIpPerDay: perInstall * 3,
       serpapiMonthly: positiveNumber(env.SERPAPI_MONTHLY_LIMIT) ?? 200,
       searchTimeoutMs: 15_000,
+      lensUploadTimeoutMs: Math.min(positiveNumber(env.LENS_UPLOAD_TIMEOUT_SECONDS) ?? 15, MAX_LENS_TIMEOUT_SECONDS) * 1000,
+      lensSearchTimeoutMs: Math.min(positiveNumber(env.LENS_SEARCH_TIMEOUT_SECONDS) ?? 45, MAX_LENS_TIMEOUT_SECONDS) * 1000,
     },
     serpapiCostPerSearchUsd: positiveNumber(env.SERPAPI_COST_PER_SEARCH_USD),
     usageFile: nonEmpty(env.USAGE_FILE) ?? 'data/usage.json',

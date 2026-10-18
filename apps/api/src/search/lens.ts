@@ -45,7 +45,10 @@ type Deps = {
   cache: TtlCache<Product[]>;
   store: UsageStore;
   monthlyLimit: number;
-  timeoutMs: number;
+  /** アップロードの制限(ミリ秒)。 */
+  uploadTimeoutMs: number;
+  /** 検索の制限(ミリ秒)。Lens の検索は 15 秒を超えることがある。 */
+  searchTimeoutMs: number;
   now?: () => Date;
   /** 月間上限の 80% に達したとき 1 度だけ呼ぶ。キーは渡さない。 */
   onWarn?: (message: string) => void;
@@ -81,7 +84,7 @@ export class LensSearcher {
     const form = new FormData();
     form.append('image', new Blob([jpeg as Uint8Array<ArrayBuffer>], { type: 'image/jpeg' }), 'item.jpg');
     form.append('api_key', apiKey);
-    const upload = await this.request('https://serpapi.com/image', { method: 'POST', body: form }, 'upload_');
+    const upload = await this.request('https://serpapi.com/image', { method: 'POST', body: form }, 'upload_', this.deps.uploadTimeoutMs);
     if (!upload.ok) return { status: 'failed', products: [], calls: 1, detail: upload.detail };
     const id = UploadResponse.safeParse(upload.value);
     if (!id.success) return { status: 'failed', products: [], calls: 1, detail: 'upload_parse' };
@@ -96,7 +99,7 @@ export class LensSearcher {
       hl: 'ja',
       api_key: apiKey,
     });
-    const search = await this.request(`https://serpapi.com/search.json?${params}`, {}, '');
+    const search = await this.request(`https://serpapi.com/search.json?${params}`, {}, '', this.deps.searchTimeoutMs);
     if (!search.ok) return { status: 'failed', products: [], calls: 2, detail: search.detail };
     const parsed = Response.safeParse(search.value);
     if (!parsed.success) return { status: 'failed', products: [], calls: 2, detail: 'parse' };
@@ -133,13 +136,14 @@ export class LensSearcher {
     url: string,
     init: { method?: string; body?: FormData },
     prefix: string,
+    timeoutMs: number,
   ): Promise<Step<unknown>> {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, this.deps.timeoutMs);
+    }, timeoutMs);
     try {
       const res = await this.deps.fetchImpl(url, { ...init, signal: controller.signal });
       if (!res.ok) return { ok: false, detail: `${prefix}http_${res.status}` };

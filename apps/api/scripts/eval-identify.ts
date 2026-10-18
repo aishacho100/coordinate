@@ -100,7 +100,8 @@ async function main() {
           cache: cache(),
           store: usageStore,
           monthlyLimit: maxSearches,
-          timeoutMs: config.limits.searchTimeoutMs,
+          uploadTimeoutMs: config.limits.lensUploadTimeoutMs,
+          searchTimeoutMs: config.limits.lensSearchTimeoutMs,
           onWarn: (message) => console.warn(message),
         })
       : null,

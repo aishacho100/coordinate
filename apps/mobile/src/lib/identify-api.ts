@@ -25,7 +25,7 @@ export async function identifyItem(cropUri: string, item: DetectedItem, options:
   if (options.imageSearchConsent === true) headers['x-image-search-consent'] = '1';
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 90_000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 120_000);
   let res: Response;
   try {
     res = await doFetch(`${baseUrl.replace(/\/$/, '')}/v1/identify`, {

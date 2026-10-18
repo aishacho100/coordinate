@@ -41,7 +41,8 @@ const identifier = anthropic
             cache: cache(),
             store: usageStore,
             monthlyLimit: config.limits.serpapiMonthly,
-            timeoutMs: config.limits.searchTimeoutMs,
+            uploadTimeoutMs: config.limits.lensUploadTimeoutMs,
+            searchTimeoutMs: config.limits.lensSearchTimeoutMs,
             onWarn: (message) => warn(message),
           })
         : null,

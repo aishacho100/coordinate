@@ -50,7 +50,7 @@ const fakeFetch = (upload: Reply, search: Reply): UploadFetchLike & { calls: Cal
 
 const make = (
   fetchImpl: UploadFetchLike,
-  over: { key?: string | null; limit?: number; timeoutMs?: number; onWarn?: (m: string) => void } = {},
+  over: { key?: string | null; limit?: number; uploadTimeoutMs?: number; searchTimeoutMs?: number; onWarn?: (m: string) => void } = {},
 ) => {
   const store = new FileUsageStore(null);
   const cache = new TtlCache<Product[]>({ ttlMs: 1000, maxEntries: 10, now: () => 0 });
@@ -60,7 +60,8 @@ const make = (
     cache,
     store,
     monthlyLimit: over.limit ?? 200,
-    timeoutMs: over.timeoutMs ?? 1000,
+    uploadTimeoutMs: over.uploadTimeoutMs ?? 1000,
+    searchTimeoutMs: over.searchTimeoutMs ?? 1000,
     now: () => NOW,
     onWarn: over.onWarn,
   });
@@ -202,8 +203,62 @@ describe('LensSearcher', () => {
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
       })) as unknown as UploadFetchLike;
-    const { s } = make(f, { timeoutMs: 10 });
+    const { s } = make(f, { uploadTimeoutMs: 10 });
     expect(await s.searchByImage(JPEG)).toMatchObject({ status: 'failed', calls: 1, detail: 'upload_timeout' });
+  });
+
+  it('アップロードは短い制限で打ち切られ、検索は長い制限で待つ(偽の時計)', async () => {
+    jest.useFakeTimers();
+    try {
+      // 応答するまで指定ミリ秒かかる偽の fetch。signal が abort されたら reject する。
+      const slow = (ms: number, body: unknown) =>
+        new Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>((resolve, reject) => {
+          const t = setTimeout(() => resolve({ ok: true, status: 200, json: async () => body }), ms);
+          return t;
+        });
+      const f = ((url: string, init?: { signal?: AbortSignal }) => {
+        const isUpload = url.startsWith('https://serpapi.com/image');
+        const p = isUpload ? slow(1_000, UPLOAD_OK) : slow(30_000, { visual_matches: [row()] });
+        return new Promise((resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+          p.then(resolve, reject);
+        });
+      }) as unknown as UploadFetchLike;
+      const { s } = make(f, { uploadTimeoutMs: 5_000, searchTimeoutMs: 45_000 });
+      const result = s.searchByImage(JPEG);
+      await jest.advanceTimersByTimeAsync(1_000); // アップロード完了
+      await jest.advanceTimersByTimeAsync(30_000); // 検索は 5 秒を超えても待つ
+      expect(await result).toMatchObject({ status: 'ok', calls: 2 });
+
+      // アップロードが制限を超えると upload_timeout。
+      const slowUpload = ((_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise((_res, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        })) as unknown as UploadFetchLike;
+      const b = make(slowUpload, { uploadTimeoutMs: 5_000, searchTimeoutMs: 45_000 });
+      const r2 = b.s.searchByImage(new Uint8Array([7, 7]));
+      await jest.advanceTimersByTimeAsync(5_000);
+      expect(await r2).toMatchObject({ status: 'failed', calls: 1, detail: 'upload_timeout' });
+
+      // 検索は長い制限(45 秒)で打ち切られ timeout。
+      const hangSearch = ((url: string, init?: { signal?: AbortSignal }) =>
+        url.startsWith('https://serpapi.com/image')
+          ? Promise.resolve({ ok: true, status: 200, json: async () => UPLOAD_OK })
+          : new Promise((_res, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            })) as unknown as UploadFetchLike;
+      const c = make(hangSearch, { uploadTimeoutMs: 5_000, searchTimeoutMs: 45_000 });
+      const r3 = c.s.searchByImage(new Uint8Array([8, 8]));
+      await jest.advanceTimersByTimeAsync(44_999);
+      let settled = false;
+      void r3.then(() => (settled = true));
+      await jest.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(await r3).toMatchObject({ status: 'failed', calls: 2, detail: 'timeout' });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('同じ画像(ハッシュが同じ)は 2 回目をキャッシュから返し、通信も加算もしない', async () => {

@@ -57,6 +57,8 @@ describe('loadConfig: 商品検索', () => {
       identifyPerIpPerDay: 90,
       serpapiMonthly: 200,
       searchTimeoutMs: 15_000,
+      lensUploadTimeoutMs: 15_000,
+      lensSearchTimeoutMs: 45_000,
     });
     expect(c.serpapiCostPerSearchUsd).toBeNull();
     expect(c.usageFile).toBe('data/usage.json');
@@ -96,5 +98,14 @@ describe('loadConfig: 商品検索', () => {
     expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '86400' }).limits.cacheTtlMs).toBe(3_600_000);
     expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '3600' }).limits.cacheTtlMs).toBe(3_600_000);
     expect(loadConfig({}).limits.cacheTtlMs).toBe(3_600_000);
+  });
+  it('Lens のタイムアウトは秒で指定でき、不正な値は既定値、上限は 120 秒', () => {
+    const c = loadConfig({ LENS_UPLOAD_TIMEOUT_SECONDS: '20', LENS_SEARCH_TIMEOUT_SECONDS: '60' });
+    expect(c.limits.lensUploadTimeoutMs).toBe(20_000);
+    expect(c.limits.lensSearchTimeoutMs).toBe(60_000);
+    const bad = loadConfig({ LENS_UPLOAD_TIMEOUT_SECONDS: '-1', LENS_SEARCH_TIMEOUT_SECONDS: 'abc' });
+    expect(bad.limits.lensUploadTimeoutMs).toBe(15_000);
+    expect(bad.limits.lensSearchTimeoutMs).toBe(45_000);
+    expect(loadConfig({ LENS_SEARCH_TIMEOUT_SECONDS: '999' }).limits.lensSearchTimeoutMs).toBe(120_000);
   });
 });
