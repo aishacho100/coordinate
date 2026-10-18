@@ -45,15 +45,17 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <View style={[styles.section, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <ThemedText type="smallBold">AIサービスへの画像送信について</ThemedText>
+      <View style={styles.section}>
+        <ThemedText type="subtitle">AIサービスへの画像送信について</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           解析を実行すると、写真を当社サーバー経由でAIサービスへ送ります。商品を探すときは、切り抜いた画像を外部の画像検索(SerpApi・Google)にも送ります。画像検索への同意は、下から取り消せます。
         </ThemedText>
       </View>
 
-      <View style={[styles.section, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <ThemedText type="smallBold">画像検索の同意</ThemedText>
+      <View style={[styles.rule, { backgroundColor: theme.border }]} />
+
+      <View style={styles.section}>
+        <ThemedText type="subtitle">画像検索の同意</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           商品を探すとき、切り抜いた画像を外部の画像検索(SerpApi・Google)に送ることへの同意です。
         </ThemedText>
@@ -74,17 +76,15 @@ export default function SettingsScreen() {
         ) : null}
       </View>
 
+      <View style={[styles.rule, { backgroundColor: theme.border }]} />
+
       <NotImplemented phase={5} description="改善データ利用の同意管理、保存データの削除、プライバシーポリシー・利用規約の表示は Phase 5〜6 で実装します。" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: Spacing.two,
-    padding: Spacing.three,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-  },
+  section: { gap: Spacing.three },
+  rule: { height: StyleSheet.hairlineWidth * 2 },
   action: { paddingTop: Spacing.two },
 });

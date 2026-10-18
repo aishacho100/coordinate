@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/app-button';
 import { Chip } from '@/components/controls';
+import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -55,7 +56,7 @@ export default function ExportScreen() {
   const crop = doc.crop ?? computeCrop(photo.width, photo.height, doc.aspect);
   const ratio = cropAspectRatio(crop, photo.width, photo.height);
   const size = exportSize(ratio);
-  const canvasW = Math.floor(Math.min(winW - Spacing.four * 2, winH * 0.5 * ratio));
+  const canvasW = Math.floor(Math.min(winW - Spacing.three * 2, winH * 0.62 * ratio));
 
   const run = async (kind: 'save' | 'share') => {
     setBusy(kind);
@@ -79,9 +80,6 @@ export default function ExportScreen() {
     <ThemedView style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <ThemedText type="eyebrow" themeColor="textSecondary">
-            Preview
-          </ThemedText>
           <View style={styles.preview}>
             {/* この View をそのまま画像として書き出す。プレビューと書き出し結果が一致する。 */}
             <View ref={shotRef} collapsable={false}>
@@ -92,8 +90,7 @@ export default function ExportScreen() {
             出力サイズ {size.width} × {size.height}px(幅 {EXPORT_WIDTH}px)
           </ThemedText>
 
-          <ThemedText type="smallBold">画面比率</ThemedText>
-          <View style={styles.wrap}>
+          <View style={styles.wrap} accessibilityLabel="画面比率">
             {ASPECTS.map((a) => (
               <Chip
                 key={a.value}
@@ -104,24 +101,37 @@ export default function ExportScreen() {
             ))}
           </View>
 
-          <ThemedText type="smallBold">画像形式</ThemedText>
-          <View style={styles.wrap}>
-            <Chip label="PNG(高画質)" selected={format === 'png'} onPress={() => setFormat('png')} />
-            <Chip label="JPEG(軽量)" selected={format === 'jpg'} onPress={() => setFormat('jpg')} />
+          <View style={styles.wrap} accessibilityLabel="画像形式">
+            <Chip label="PNG" accessibilityLabel="PNG(高画質)" selected={format === 'png'} onPress={() => setFormat('png')} />
+            <Chip label="JPEG" accessibilityLabel="JPEG(軽量)" selected={format === 'jpg'} onPress={() => setFormat('jpg')} />
           </View>
 
           {status ? (
             <ThemedText
               type="small"
               accessibilityRole={status.kind === 'error' ? 'alert' : undefined}
-              style={{ color: status.kind === 'error' ? theme.error : theme.success }}>
+              style={[styles.center, { color: status.kind === 'error' ? theme.error : theme.success }]}>
               {status.text}
             </ThemedText>
           ) : null}
 
           <View style={styles.actions}>
-            <AppButton label={busy === 'share' ? '準備中…' : '共有する(Instagramなど)'} onPress={() => run('share')} disabled={busy !== null} />
-            <AppButton label={busy === 'save' ? '保存中…' : '端末に保存'} variant="secondary" onPress={() => run('save')} disabled={busy !== null} />
+            <IconButton
+              icon="download"
+              variant="outline"
+              size={56}
+              accessibilityLabel={busy === 'save' ? '保存中' : '端末に保存'}
+              disabled={busy !== null}
+              onPress={() => run('save')}
+            />
+            <IconButton
+              icon="share"
+              variant="main"
+              size={64}
+              accessibilityLabel={busy === 'share' ? '準備中' : '共有する(Instagramなど)'}
+              disabled={busy !== null}
+              onPress={() => run('share')}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -133,9 +143,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.three, padding: Spacing.four },
-  content: { padding: Spacing.four, gap: Spacing.three },
+  content: { padding: Spacing.three, gap: Spacing.three },
   preview: { alignItems: 'center' },
   center: { textAlign: 'center' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  actions: { gap: Spacing.three, marginTop: Spacing.three },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Spacing.two },
+  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.four, marginTop: Spacing.two },
 });

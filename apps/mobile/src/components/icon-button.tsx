@@ -16,6 +16,8 @@ type Props = {
   /** main: 金の丸(いま押すもの)。outline: 細い枠の丸。plain: 枠なしの細い線。 */
   variant?: 'main' | 'plain' | 'outline';
   disabled?: boolean;
+  /** タブやトグルの選択状態。渡すと読み上げに反映し、plain では選択中の目印を出す。 */
+  selected?: boolean;
   /** main / outline の直径。既定 56。plain は 44 固定。 */
   size?: number;
   tooltipPlacement?: 'above' | 'below';
@@ -28,6 +30,7 @@ export function IconButton({
   onPress,
   variant = 'plain',
   disabled = false,
+  selected,
   size = 56,
   tooltipPlacement = 'above',
 }: Props) {
@@ -55,7 +58,7 @@ export function IconButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ disabled }}
+        accessibilityState={selected === undefined ? { disabled } : { disabled, selected }}
         disabled={disabled}
         onPress={onPress}
         onLongPress={showTip}
@@ -67,7 +70,12 @@ export function IconButton({
           pressed && styles.pressed,
           disabled && styles.disabled,
         ]}>
-        <Icon name={icon} size={main ? 26 : 24} color={main ? Colors.onAccent : Colors.text} />
+        <Icon
+          name={icon}
+          size={main ? 26 : 24}
+          color={main ? Colors.onAccent : selected === false ? Colors.textSecondary : Colors.text}
+        />
+        {selected && !main ? <View style={styles.mark} /> : null}
       </Pressable>
       {tip ? (
         <View
@@ -85,6 +93,7 @@ export function IconButton({
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
   base: { alignItems: 'center', justifyContent: 'center' },
+  mark: { position: 'absolute', bottom: 3, width: 16, height: 1.5, backgroundColor: Colors.text },
   outline: { borderWidth: 1, borderColor: Colors.textSecondary },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.4 },

@@ -17,7 +17,15 @@ export type IconName =
   | 'similar'
   | 'settings'
   | 'close'
-  | 'back';
+  | 'back'
+  | 'crop'
+  | 'undo'
+  | 'redo'
+  | 'pointer'
+  | 'yen'
+  | 'rotate'
+  | 'reset'
+  | 'download';
 
 type Props = {
   name: IconName;
@@ -100,5 +108,26 @@ function shape(name: IconName) {
       return <Path d="M6 6l12 12M18 6L6 18" />;
     case 'back':
       return <Path d="M19 12H5M10.5 6.5L5 12l5.5 5.5" />;
+    case 'crop':
+      return <Path d="M7 3v14h14M3 7h14v14" />;
+    case 'undo':
+      return <Path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" />;
+    case 'redo':
+      return <Path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3" />;
+    case 'pointer':
+      return (
+        <>
+          <Circle cx={6} cy={18} r={2.5} />
+          <Path d="M8 16L19 5M13 5h6v6" />
+        </>
+      );
+    case 'yen':
+      return <Path d="M7 4l5 8 5-8M12 12v8M8 14.5h8M8 17.5h8" />;
+    case 'rotate':
+      return <Path d="M19.5 12a7.5 7.5 0 11-2.2-5.3M19.5 4.5v4h-4" />;
+    case 'reset':
+      return <Path d="M4.5 12a7.5 7.5 0 112.2 5.3M4.5 19.5v-4h4" />;
+    case 'download':
+      return <Path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" />;
   }
 }

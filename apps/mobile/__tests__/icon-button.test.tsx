@@ -31,4 +31,9 @@ describe('IconButton', () => {
     });
     expect(screen.queryByText('設定')).toBeNull();
   });
+
+  it('selected を渡すと選択状態が読み上げられる', () => {
+    render(<IconButton icon="text" accessibilityLabel="ラベル" onPress={jest.fn()} selected />);
+    expect(screen.getByLabelText('ラベル').props.accessibilityState).toMatchObject({ selected: true });
+  });
 });

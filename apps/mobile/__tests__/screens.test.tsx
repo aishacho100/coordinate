@@ -601,6 +601,41 @@ describe('AI解析画面', () => {
   });
 });
 
+describe('編集画面(アイコンのタブ)', () => {
+  it('操作はアイコンのタブで切り替え、文字ラベルは出さない。書き出しへは丸ボタンで進む', () => {
+    render(withPhoto(<EditorScreen />));
+    for (const name of ['写真', 'テンプレート', 'ラベル', '色', '線', '元に戻す', 'やり直す']) {
+      expect(screen.getByLabelText(name)).toBeTruthy();
+    }
+    expect(screen.queryByText('ラベル')).toBeNull();
+    expect(screen.getByLabelText('写真').props.accessibilityState).toMatchObject({ selected: true });
+    fireEvent.press(screen.getByLabelText('テンプレート'));
+    expect(screen.getByLabelText('テンプレート').props.accessibilityState).toMatchObject({ selected: true });
+    fireEvent.press(screen.getByLabelText('書き出しへ'));
+    expect(mockPush).toHaveBeenCalledWith('/export');
+  });
+
+  it('ラベルを足すと、ラベル・色・線のタブで中身を編集できる', () => {
+    render(withPhoto(<EditorScreen />));
+    fireEvent.press(screen.getByLabelText('ラベル'));
+    fireEvent.press(screen.getByLabelText('ラベルを追加'));
+    expect(screen.getByLabelText('ブランド名')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('色'));
+    expect(screen.getByLabelText('文字色 #FFFFFF')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('線'));
+    expect(screen.getByLabelText('線の色 #FFFFFF')).toBeTruthy();
+  });
+});
+
+describe('書き出し画面(アイコンボタン)', () => {
+  it('保存と共有は読み上げ名つきのアイコンボタンで、文字は出さない', () => {
+    render(withPhoto(<ExportScreen />));
+    expect(screen.getByLabelText('共有する(Instagramなど)')).toBeTruthy();
+    expect(screen.getByLabelText('端末に保存')).toBeTruthy();
+    expect(screen.queryByText('端末に保存')).toBeNull();
+  });
+});
+
 describe('設定', () => {
   it('画像検索の同意の状態を出し、同意済みなら取り消せる。取り消すと未設定になる', async () => {
     mockConsent = 'granted';
