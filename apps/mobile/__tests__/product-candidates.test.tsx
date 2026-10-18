@@ -46,10 +46,10 @@ const response = (over: Partial<IdentifyResponse> = {}): IdentifyResponse => ({
   level: 'low',
   rationale: '',
   candidates: [google, rakuten],
-  searches: { serpapi: 'ok', rakuten: 'ok' },
+  searches: { serpapi: 'ok', rakuten: 'ok', lens: 'ok' },
   comparison: 'done',
   queries: ['q'],
-  usage: { claude: { inputTokens: 1, outputTokens: 1 }, serpapiSearches: 1, rakutenCalls: 1 },
+  usage: { claude: { inputTokens: 1, outputTokens: 1 }, serpapiSearches: 1, rakutenCalls: 1, lensSearches: 1 },
   estimatedCostUsd: 0.01,
   fetchedAt: FETCHED,
   timings: { total: 100 },
@@ -124,14 +124,14 @@ describe('ProductCandidates', () => {
     fireEvent.press(screen.getByRole('link', { name: 'Supported by Rakuten Developers' }));
     expect(openURL).toHaveBeenCalledWith('https://developers.rakuten.com');
     unmount();
-    render(<ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'failed' } })} />);
+    render(<ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'failed', lens: 'ok' } })} />);
     expect(screen.queryByText('Supported by Rakuten Developers')).toBeNull();
   });
 
   it('使えなかった検索は理由を一行で出す', () => {
     render(
       <ProductCandidates
-        response={response({ searches: { serpapi: 'budget_exhausted', rakuten: 'not_configured' } })}
+        response={response({ searches: { serpapi: 'budget_exhausted', rakuten: 'not_configured', lens: 'ok' } })}
       />,
     );
     expect(
@@ -139,9 +139,19 @@ describe('ProductCandidates', () => {
     ).toBeTruthy();
   });
 
+  it('画像検索が使えなかった理由(未同意・失敗)を出す', () => {
+    const { unmount } = render(
+      <ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'ok', lens: 'not_consented' } })} />,
+    );
+    expect(screen.getByText('画像検索には同意が必要です。')).toBeTruthy();
+    unmount();
+    render(<ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'ok', lens: 'failed' } })} />);
+    expect(screen.getByText('画像検索は失敗しました。')).toBeTruthy();
+  });
+
   it('失敗した検索は「失敗しました」と出し、すべて ok なら何も出さない', () => {
     const { unmount } = render(
-      <ProductCandidates response={response({ searches: { serpapi: 'failed', rakuten: 'ok' } })} />,
+      <ProductCandidates response={response({ searches: { serpapi: 'failed', rakuten: 'ok', lens: 'ok' } })} />,
     );
     expect(screen.getByText('Google ショッピングの検索は失敗しました。')).toBeTruthy();
     unmount();

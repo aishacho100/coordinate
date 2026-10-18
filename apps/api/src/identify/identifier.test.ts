@@ -51,9 +51,9 @@ describe('Identifier', () => {
     expect(r.verdict).toBe('candidates');
     expect(r.level).toBe('low');
     expect(r.candidates.length).toBe(2);
-    expect(r.searches).toEqual({ serpapi: 'ok', rakuten: 'ok' });
+    expect(r.searches).toEqual({ serpapi: 'ok', rakuten: 'ok', lens: 'not_consented' });
     expect(r.comparison).toBe('done');
-    expect(r.usage).toEqual({ claude: usage(980, 120), serpapiSearches: 2, rakutenCalls: 2 });
+    expect(r.usage).toEqual({ claude: usage(980, 120), serpapiSearches: 2, rakutenCalls: 2, lensSearches: 0 });
     expect(r.estimatedCostUsd).toBeCloseTo((980 * 2 + 120 * 10) / 1e6 + 0.05, 6);
     expect(r.fetchedAt).toBe(NOW.toISOString());
   });
@@ -126,7 +126,7 @@ describe('Identifier', () => {
 
   it('片方が使えなくても、もう一方の結果で続け、状態を返す', async () => {
     const r = await make({ serpapi: searcher([{ status: 'budget_exhausted', products: [], calls: 0 }]) }).identify(img, sampleItem);
-    expect(r.searches).toEqual({ serpapi: 'budget_exhausted', rakuten: 'ok' });
+    expect(r.searches).toEqual({ serpapi: 'budget_exhausted', rakuten: 'ok', lens: 'not_consented' });
     expect(r.candidates.length).toBe(1);
   });
 

@@ -18,8 +18,9 @@ const SUBTEXT: Partial<Record<IdentifyVerdict, string>> = {
   unidentified: '写真から読み取れる手がかりが足りず、商品名やブランドは決められませんでした。',
 };
 
-const SEARCH_NAME = { serpapi: 'Google ショッピング', rakuten: '楽天市場' } as const;
+const SEARCH_SUBJECT = { lens: '画像検索は', serpapi: 'Google ショッピングの検索は', rakuten: '楽天市場の検索は' } as const;
 const SEARCH_REASON: Record<Exclude<SearchStatus, 'ok'>, string> = {
+  not_consented: '同意が必要です',
   not_configured: '未設定です',
   budget_exhausted: '今月の上限に達しました',
   failed: '失敗しました',
@@ -35,9 +36,14 @@ const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
 /** 商品特定の結果。確信度の数値は出さない(並び順は API 側で済んでいる)。 */
 export function ProductCandidates({ response }: { response: IdentifyResponse }) {
   const theme = useTheme();
-  const unavailable = (['serpapi', 'rakuten'] as const)
+  const unavailable = (['lens', 'serpapi', 'rakuten'] as const)
     .filter((k) => response.searches[k] !== 'ok')
-    .map((k) => `${SEARCH_NAME[k]}の検索は${SEARCH_REASON[response.searches[k] as Exclude<SearchStatus, 'ok'>]}。`);
+    .map((k) => {
+      const status = response.searches[k] as Exclude<SearchStatus, 'ok'>;
+      // 「画像検索は同意が必要です」ではなく「画像検索には同意が必要です」と読ませる。
+      if (k === 'lens' && status === 'not_consented') return '画像検索には同意が必要です。';
+      return `${SEARCH_SUBJECT[k]}${SEARCH_REASON[status]}。`;
+    });
   const subtext = SUBTEXT[response.verdict];
 
   return (

@@ -11,6 +11,8 @@ export type Config = {
   /** 費用概算用。両方そろった場合のみ。 */
   pricing: { inputPerMTok: number; outputPerMTok: number } | null;
   serpapiKey: string | null;
+  /** 画像検索(Google Lens)を使えるか。SerpApi のキーがあれば true。 */
+  lensEnabled: boolean;
   /** applicationId と accessKey がそろったときだけ非 null。affiliateId が無ければ収益化されない。 */
   rakuten: { applicationId: string; accessKey: string; affiliateId: string | null } | null;
   limits: {
@@ -56,6 +58,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ratePerMinute: positiveNumber(env.RATE_LIMIT_PER_MINUTE) ?? 20,
     pricing: priceIn !== null && priceOut !== null ? { inputPerMTok: priceIn, outputPerMTok: priceOut } : null,
     serpapiKey: nonEmpty(env.SERPAPI_API_KEY),
+    lensEnabled: nonEmpty(env.SERPAPI_API_KEY) !== null,
     rakuten:
       rakutenId && rakutenKey
         ? { applicationId: rakutenId, accessKey: rakutenKey, affiliateId: nonEmpty(env.RAKUTEN_AFFILIATE_ID) }

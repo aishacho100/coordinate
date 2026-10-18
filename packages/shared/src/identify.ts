@@ -7,7 +7,7 @@ import { IdentificationLevelSchema, ProductCandidateSchema, type IdentificationL
 export const IdentifyVerdictSchema = z.enum(['identified', 'candidates', 'unidentified']);
 export type IdentifyVerdict = z.infer<typeof IdentifyVerdictSchema>;
 
-export const SearchStatusSchema = z.enum(['ok', 'not_configured', 'budget_exhausted', 'failed']);
+export const SearchStatusSchema = z.enum(['ok', 'not_configured', 'budget_exhausted', 'failed', 'not_consented']);
 export type SearchStatus = z.infer<typeof SearchStatusSchema>;
 
 /** 候補と、何が一致し何が確認できていないか。 */
@@ -23,7 +23,7 @@ export const IdentifyResponseSchema = z.object({
   level: IdentificationLevelSchema,
   rationale: z.string(),
   candidates: z.array(IdentifyCandidateSchema).max(5),
-  searches: z.object({ serpapi: SearchStatusSchema, rakuten: SearchStatusSchema }),
+  searches: z.object({ serpapi: SearchStatusSchema, rakuten: SearchStatusSchema, lens: SearchStatusSchema }),
   /** 画像との照合の結果。failed のときは候補を「未照合」として返す。 */
   comparison: z.enum(['done', 'failed', 'skipped']),
   queries: z.array(z.string()),
@@ -31,6 +31,7 @@ export const IdentifyResponseSchema = z.object({
     claude: UsageSchema,
     serpapiSearches: z.number().int().nonnegative(),
     rakutenCalls: z.number().int().nonnegative(),
+    lensSearches: z.number().int().nonnegative(),
   }),
   estimatedCostUsd: z.number().nonnegative().nullable(),
   fetchedAt: z.string().datetime(),

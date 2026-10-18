@@ -161,10 +161,11 @@ export class Identifier {
       level,
       rationale: rationale(verdict, comparison),
       candidates,
-      searches: { serpapi: serp.status, rakuten: rak.status },
+      // Lens は L3 で本実装する。それまでは常に未同意・0 回の仮の値。
+      searches: { serpapi: serp.status, rakuten: rak.status, lens: 'not_consented' },
       comparison,
       queries: gen.queries,
-      usage: { claude, serpapiSearches, rakutenCalls },
+      usage: { claude, serpapiSearches, rakutenCalls, lensSearches: 0 },
       estimatedCostUsd: claudeCost === null ? null : claudeCost + serpCost,
       fetchedAt: now.toISOString(),
       timings: { total: Math.round(performance.now() - t0) },

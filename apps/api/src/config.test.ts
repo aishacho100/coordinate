@@ -48,6 +48,7 @@ describe('loadConfig: 商品検索', () => {
   it('未設定なら検索は使えず、上限は既定値', () => {
     const c = loadConfig({});
     expect(c.serpapiKey).toBeNull();
+    expect(c.lensEnabled).toBe(false);
     expect(c.rakuten).toBeNull();
     expect(c.limits).toEqual({
       searchesPerProviderPerItem: 2,
@@ -59,6 +60,10 @@ describe('loadConfig: 商品検索', () => {
     });
     expect(c.serpapiCostPerSearchUsd).toBeNull();
     expect(c.usageFile).toBe('data/usage.json');
+  });
+  it('SERPAPI_API_KEY があれば lensEnabled が true になる', () => {
+    expect(loadConfig({ SERPAPI_API_KEY: 's' }).lensEnabled).toBe(true);
+    expect(loadConfig({ SERPAPI_API_KEY: '  ' }).lensEnabled).toBe(false);
   });
   it('楽天は applicationId と accessKey がそろったときだけ有効(affiliateId は任意)', () => {
     expect(loadConfig({ RAKUTEN_APPLICATION_ID: 'a' }).rakuten).toBeNull();
