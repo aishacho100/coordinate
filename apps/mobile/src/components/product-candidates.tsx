@@ -9,6 +9,8 @@ import { Colors, Spacing } from '@/constants/theme';
 import { formatAsOf, formatPrice } from '@/lib/format-price';
 import { useTheme } from '@/hooks/use-theme';
 
+const CARD_W = 176;
+
 const HEADING: Record<IdentifyVerdict, string> = {
   identified: '特定できました',
   candidates: '候補が見つかりました',
@@ -231,6 +233,18 @@ function Candidate({
         ) : null}
       </View>
       </Pressable>
+      {hasDetail ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? '閉じる' : '詳しく見る'}
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((v) => !v)}
+          style={styles.expand}>
+          <View style={styles.expandDisc}>
+            <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={18} color={Colors.text} />
+          </View>
+        </Pressable>
+      ) : null}
       <View style={styles.linkRow}>
         {product.pageUrl && linkLabel ? (
           <Pressable
@@ -249,16 +263,6 @@ function Candidate({
         ) : (
           <View style={styles.link} />
         )}
-        {hasDetail ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? '閉じる' : '詳しく見る'}
-            accessibilityState={{ expanded }}
-            onPress={() => setExpanded((v) => !v)}
-            style={styles.expand}>
-            <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={20} color={theme.textSecondary} />
-          </Pressable>
-        ) : null}
       </View>
       {expanded ? (
         <View style={styles.body}>
@@ -277,7 +281,6 @@ function Candidate({
   );
 }
 
-const CARD_W = 176;
 
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.two },
@@ -303,9 +306,10 @@ const styles = StyleSheet.create({
   noPrice: { flexShrink: 1, fontSize: 12 },
   mark: { minWidth: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
   fine: { fontSize: 11, lineHeight: 17, letterSpacing: 0.2 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
+  expandDisc: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
   link: { flexShrink: 1, alignSelf: 'center' },
-  expand: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -Spacing.two },
+  expand: { position: 'absolute', top: Spacing.two + (CARD_W - Spacing.two * 2 - 4) - 44, right: Spacing.two, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   linkText: { borderBottomWidth: StyleSheet.hairlineWidth * 2 },
   credit: { fontSize: 11, lineHeight: 16, letterSpacing: 0.6 },
 });
