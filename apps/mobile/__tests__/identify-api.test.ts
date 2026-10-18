@@ -88,6 +88,17 @@ describe('identifyItem', () => {
     expect((image?.[1] as unknown as { uri: string }).uri).toBe('file:///c.jpg');
   });
 
+  it('imageSearchConsent が true のときだけ x-image-search-consent: 1 を付ける', async () => {
+    const headersOf = async (extra: { imageSearchConsent?: boolean }) => {
+      const f = jest.fn().mockResolvedValue(res(200, sampleIdentify));
+      await identifyItem('f', sampleDetected, { ...opts(f), ...extra });
+      return (f.mock.calls[0] as unknown as [string, { headers: Record<string, string> }])[1].headers;
+    };
+    expect((await headersOf({ imageSearchConsent: true }))['x-image-search-consent']).toBe('1');
+    expect(await headersOf({ imageSearchConsent: false })).not.toHaveProperty('x-image-search-consent');
+    expect(await headersOf({})).not.toHaveProperty('x-image-search-consent');
+  });
+
   it('エラー応答はコードを AnalyzeError にする', async () => {
     const f = jest.fn().mockResolvedValue(res(429, { error: 'quota_exceeded', message: 'm' }));
     const p = identifyItem('f', sampleDetected, opts(f));
