@@ -41,6 +41,8 @@ const make = (over: Partial<ConstructorParameters<typeof Identifier>[0]> = {}) =
     maxSearchesPerProvider: 2,
     pricing: { inputPerMTok: 2, outputPerMTok: 10 },
     serpapiCostPerSearchUsd: 0.025,
+    lens: null,
+    prepareLens: async (d) => d,
     now: () => NOW,
     ...over,
   });
@@ -207,6 +209,146 @@ describe('Identifier', () => {
     const dup = product('same');
     const r = await make({ serpapi: searcher([ok([])]), rakuten: searcher([ok([dup, dup])]) }).identify(img, sampleItem);
     expect(r.candidates).toHaveLength(1);
+  });
+  describe('Lens(画像検索)', () => {
+    const lensProduct = (n: string, over: Partial<Product> = {}): Product => ({
+      ...product(n, 'google_lens', `https://encrypted-tbn0.gstatic.com/${n}.jpg`),
+      pageUrl: `https://shop.example/${n}`,
+      ...over,
+    });
+    const fakeLens = (outcome: SearchOutcome) => {
+      const l = {
+        calls: 0,
+        async searchByImage(_j: Uint8Array) {
+          l.calls += 1;
+          return outcome;
+        },
+      };
+      return l;
+    };
+    const capture = () => {
+      const c = { passed: [] as Product[] };
+      const comparer = {
+        compare: async (_i: unknown, cands: Product[]) => {
+          c.passed = cands;
+          return { judgements: [], usage: usage(1, 1) };
+        },
+      };
+      return { c, comparer };
+    };
+
+    it('同意が無ければ Lens を呼ばず not_consented。テキスト検索は行う', async () => {
+      const lens = fakeLens(ok([lensProduct('a')], 2));
+      const serp = searcher([ok([product('g1', 'google_shopping')])]);
+      const r = await make({ lens, serpapi: serp }).identify(img, sampleItem, { consent: false });
+      expect(lens.calls).toBe(0);
+      expect(r.searches.lens).toBe('not_consented');
+      expect(serp.queries.length).toBeGreaterThan(0);
+      expect(r.usage.lensSearches).toBe(0);
+    });
+
+    it('同意ありでも Lens が未設定(null)なら not_configured', async () => {
+      const r = await make({ lens: null }).identify(img, sampleItem, { consent: true });
+      expect(r.searches.lens).toBe('not_configured');
+    });
+
+    it('同意ありで使える候補が 3 件以上なら、テキスト検索は呼ばない。Lens の候補が先頭', async () => {
+      const lens = fakeLens(ok([lensProduct('a'), lensProduct('b'), lensProduct('c')], 2));
+      const serp = searcher([ok([product('g1', 'google_shopping')])]);
+      const rak = searcher([ok([product('r1')])]);
+      const { c, comparer } = capture();
+      const r = await make({ lens, serpapi: serp, rakuten: rak, comparer }).identify(img, sampleItem, { consent: true });
+      expect(serp.queries).toHaveLength(0);
+      expect(rak.queries).toHaveLength(0);
+      expect(c.passed.map((p) => p.source)).toEqual(['google_lens', 'google_lens', 'google_lens']);
+      expect(r.searches.lens).toBe('ok');
+      expect(r.usage).toMatchObject({ serpapiSearches: 0, rakutenCalls: 0, lensSearches: 2 });
+      expect(r.estimatedCostUsd).toBeCloseTo(((80 + 1) * 2 + (20 + 1) * 10) / 1e6 + 2 * 0.025, 6);
+    });
+
+    it('商品ページか画像が無い行は使える候補に数えない(3 件未満ならテキスト検索も行う)', async () => {
+      const lens = fakeLens(
+        ok([lensProduct('a'), lensProduct('b'), lensProduct('c', { pageUrl: undefined }), lensProduct('d', { imageUrl: undefined })], 2),
+      );
+      const serp = searcher([ok([product('g1', 'google_shopping')])]);
+      await make({ lens, serpapi: serp }).identify(img, sampleItem, { consent: true });
+      expect(serp.queries.length).toBeGreaterThan(0);
+    });
+
+    it('使える候補が 3 件未満なら、テキスト検索も行い合成する(重複除去・最大 12 件・Lens の先頭)', async () => {
+      const lens = fakeLens(
+        ok([lensProduct('a'), lensProduct('a'), lensProduct('b', { productId: 'x', pageUrl: 'https://shop.example/a' })], 2),
+      );
+      const g = Array.from({ length: 20 }, (_, i) => product(`g${i}`, 'google_shopping'));
+      const { c, comparer } = capture();
+      await make({ lens, serpapi: searcher([ok(g)]), rakuten: searcher([ok([product('r1')])]), comparer }).identify(img, sampleItem, {
+        consent: true,
+      });
+      expect(c.passed).toHaveLength(12);
+      expect(c.passed[0]?.source).toBe('google_lens');
+      expect(c.passed.filter((p) => p.source === 'google_lens')).toHaveLength(1);
+    });
+
+    it('Lens が 8 件を超えても 8 件まで', async () => {
+      const many = Array.from({ length: 12 }, (_, i) => lensProduct(`m${i}`));
+      const { c, comparer } = capture();
+      await make({ lens: fakeLens(ok(many, 2)), comparer }).identify(img, sampleItem, { consent: true });
+      expect(c.passed).toHaveLength(8);
+    });
+
+    it.each(['failed', 'budget_exhausted', 'not_configured'] as const)('Lens が %s ならテキスト検索へ', async (status) => {
+      const lens = fakeLens({ status, products: [], calls: status === 'failed' ? 1 : 0, detail: 'upload_http_500' });
+      const r = await make({ lens }).identify(img, sampleItem, { consent: true });
+      expect(r.searches.lens).toBe(status);
+      expect(r.candidates.length).toBe(2);
+      expect(r.usage.lensSearches).toBe(status === 'failed' ? 1 : 0);
+    });
+
+    it('Lens もテキスト検索も使えなければ SearchUnavailableError', async () => {
+      const dead = searcher([{ status: 'failed', products: [], calls: 1 }]);
+      const lens = fakeLens({ status: 'failed', products: [], calls: 1 });
+      await expect(make({ lens, serpapi: dead, rakuten: dead }).identify(img, sampleItem, { consent: true })).rejects.toThrow(
+        'SearchUnavailableError',
+      );
+    });
+
+    it('Lens が ok で 0 件、テキストが全て使えないなら、例外にせず C', async () => {
+      const dead = searcher([{ status: 'failed', products: [], calls: 1 }]);
+      const r = await make({ lens: fakeLens(ok([], 2)), serpapi: dead, rakuten: dead }).identify(img, sampleItem, { consent: true });
+      expect(r.verdict).toBe('unidentified');
+      expect(r.searches.lens).toBe('ok');
+    });
+
+    it('prepareLens が例外なら lens は failed でテキスト検索へ。Lens は呼ばない', async () => {
+      const lens = fakeLens(ok([lensProduct('a')], 2));
+      const seen: string[] = [];
+      const r = await make({
+        lens,
+        prepareLens: async () => {
+          throw new Error('bad image');
+        },
+      }).identify(img, sampleItem, { consent: true, onSearchFailure: (p, d) => seen.push(`${p}:${d}`) });
+      expect(lens.calls).toBe(0);
+      expect(r.searches.lens).toBe('failed');
+      expect(seen).toEqual(['lens:prepare']);
+      expect(r.candidates.length).toBe(2);
+    });
+
+    it('Lens の failed を onSearchFailure に lens として通知する', async () => {
+      const seen: string[] = [];
+      await make({ lens: fakeLens({ status: 'failed', products: [], calls: 1, detail: 'upload_http_429' }) }).identify(img, sampleItem, {
+        consent: true,
+        onSearchFailure: (p, d) => seen.push(`${p}:${d}`),
+      });
+      expect(seen).toEqual(['lens:upload_http_429']);
+    });
+
+    it('Lens に渡すのは prepareLens の出力', async () => {
+      let got: Uint8Array | undefined;
+      const lens = { searchByImage: async (j: Uint8Array) => ((got = j), ok([], 2)) };
+      await make({ lens, prepareLens: async () => new Uint8Array([9, 9]) }).identify(img, sampleItem, { consent: true });
+      expect(Array.from(got ?? [])).toEqual([9, 9]);
+    });
   });
   describe('ブランドの再検証(クライアントの申告を信用しない)', () => {
     const allMatchComparer = {
