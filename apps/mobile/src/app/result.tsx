@@ -200,6 +200,7 @@ export default function ResultScreen() {
             setPicking((cur) => (cur === 'edit' ? null : cur));
           }}
           onSearch={() => void requestSearch(selected)}
+          onToggleCandidate={(c) => dispatch({ type: 'toggleCandidate', id: selected.id, ...c })}
           asking={asking.includes(selected.id)}
           onGrant={() => void answerConsent(selected, 'granted')}
           onDecline={() => void answerConsent(selected, 'declined')}
@@ -278,6 +279,7 @@ function ItemDetail({
   onBrand,
   onRemove,
   onSearch,
+  onToggleCandidate,
   asking,
   onGrant,
   onDecline,
@@ -289,6 +291,7 @@ function ItemDetail({
   onBrand: (brand: string) => void;
   onRemove: () => void;
   onSearch: () => void;
+  onToggleCandidate: (key: { source: string; productId: string }) => void;
   asking: boolean;
   onGrant: () => void;
   onDecline: () => void;
@@ -346,24 +349,33 @@ function ItemDetail({
       ) : null}
 
       {item.detected ? (
-        <SearchResult identify={item.identify} asking={asking} onGrant={onGrant} onDecline={onDecline} />
+        <SearchResult
+          item={item}
+          asking={asking}
+          onGrant={onGrant}
+          onDecline={onDecline}
+          onToggleCandidate={onToggleCandidate}
+        />
       ) : null}
     </View>
   );
 }
 
 function SearchResult({
-  identify,
+  item,
   asking,
   onGrant,
   onDecline,
+  onToggleCandidate,
 }: {
-  identify: ResultItem['identify'];
+  item: ResultItem;
   asking: boolean;
   onGrant: () => void;
   onDecline: () => void;
+  onToggleCandidate: (key: { source: string; productId: string }) => void;
 }) {
   const theme = useTheme();
+  const identify = item.identify;
   if (asking && identify.status !== 'loading') {
     return <ImageSearchConsentCard onGrant={onGrant} onDecline={onDecline} />;
   }
@@ -385,7 +397,14 @@ function SearchResult({
     );
   }
   if (identify.status === 'done') {
-    return <ProductCandidates response={identify.response} />;
+    return (
+      <ProductCandidates
+        response={identify.response}
+        chosen={item.chosen ?? null}
+        onToggle={onToggleCandidate}
+        autoApplied={identify.response.verdict === 'identified' && !item.choiceTouched}
+      />
+    );
   }
   return null;
 }

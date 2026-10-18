@@ -1,7 +1,10 @@
 import type { CropRect, NewLabelInput } from '@coordinate/layout';
 import { DEFAULT_CATEGORIES } from '@coordinate/shared';
 
-import type { ResultItem } from './analysis-reducer';
+import { formatPrice } from '@/lib/format-price';
+
+import { sameCandidate, type ResultItem } from './analysis-reducer';
+import { shortProductName } from './short-product-name';
 
 const LEFT_X = 0.05;
 const RIGHT_X = 0.52;
@@ -10,6 +13,22 @@ const MAX_Y = 0.88;
 
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 const categoryName = (id: string) => DEFAULT_CATEGORIES.find((c) => c.id === id)?.labelJa ?? '';
+
+/** 選んだ候補からラベルの内容を作る。ブランドは item.brand を優先し、空のときだけ候補で補う。値段は JPY のときだけ。 */
+function labelContent(it: ResultItem): { brand: string; name: string; price?: string } {
+  const category = categoryName(it.categoryId);
+  const brand = it.brand.trim();
+  const response = it.identify.status === 'done' ? it.identify.response : null;
+  const product = it.chosen ? response?.candidates.find((c) => sameCandidate(it.chosen, c.product))?.product : undefined;
+  if (!product) return { brand, name: category };
+  const finalBrand = brand || product.brand.trim();
+  const price = product.price?.currency === 'JPY' ? formatPrice(product.price.amount, 'JPY') : undefined;
+  return {
+    brand: finalBrand,
+    name: shortProductName(product.name, finalBrand, category),
+    ...(price ? { price } : {}),
+  };
+}
 
 /**
  * 認識結果をラベルの初期値に変換する。
@@ -45,8 +64,7 @@ export function itemsToLabelInputs(
   return items.map((it, i) => ({
     id: newId(),
     itemId: it.id,
-    brand: it.brand.trim(),
-    name: categoryName(it.categoryId),
+    ...labelContent(it),
     anchor: anchors[i],
     position: positions.get(i),
   }));

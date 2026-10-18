@@ -35,7 +35,20 @@ const PRICE_LABEL: Record<string, string> = {
 const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
 
 /** 商品特定の結果。確信度の数値は出さない(並び順は API 側で済んでいる)。 */
-export function ProductCandidates({ response }: { response: IdentifyResponse }) {
+export function ProductCandidates({
+  response,
+  chosen = null,
+  onToggle,
+  autoApplied = false,
+}: {
+  response: IdentifyResponse;
+  /** ラベルに入れる商品として選んでいる候補。 */
+  chosen?: { source: string; productId: string } | null;
+  /** 渡すと、候補のカードを押して選択・解除できる。 */
+  onToggle?: (key: { source: string; productId: string }) => void;
+  /** 特定(A)の先頭を自動で選んだままか。ラベルに入れたことと値段の注意を出す。 */
+  autoApplied?: boolean;
+}) {
   const unavailable = (['lens', 'serpapi', 'rakuten'] as const)
     .filter((k) => response.searches[k] !== 'ok')
     .map((k) => {
@@ -56,6 +69,16 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
           {subtext}
         </ThemedText>
       ) : null}
+      {onToggle && autoApplied && chosen ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          ラベルに入れました。値段は出品時点です
+        </ThemedText>
+      ) : null}
+      {onToggle && !chosen && response.verdict === 'candidates' && response.candidates.length > 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          選ぶとラベルに入ります
+        </ThemedText>
+      ) : null}
       {response.comparison === 'failed' ? (
         <ThemedText type="small" themeColor="textSecondary">
           画像との照合ができなかったため、確定できません
@@ -65,7 +88,12 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
       {response.verdict !== 'unidentified' && response.candidates.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
           {response.candidates.map((c) => (
-            <Candidate key={`${c.product.source}:${c.product.productId}`} candidate={c} />
+            <Candidate
+              key={`${c.product.source}:${c.product.productId}`}
+              candidate={c}
+              selected={!!chosen && chosen.source === c.product.source && chosen.productId === c.product.productId}
+              onToggle={onToggle ? () => onToggle({ source: c.product.source, productId: c.product.productId }) : undefined}
+            />
           ))}
         </ScrollView>
       ) : null}
@@ -101,7 +129,15 @@ function hostnameOf(url: string | undefined): string | null {
   }
 }
 
-function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
+function Candidate({
+  candidate,
+  selected,
+  onToggle,
+}: {
+  candidate: IdentifyCandidate;
+  selected: boolean;
+  onToggle?: () => void;
+}) {
   const theme = useTheme();
   const { product, matched, unconfirmed } = candidate;
   const price = product.price;
@@ -124,7 +160,19 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
   const same = candidate.matchType === 'identical';
 
   return (
-    <View style={[styles.candidate, { backgroundColor: theme.backgroundElement }]}>
+    <View
+      style={[
+        styles.candidate,
+        { backgroundColor: theme.backgroundElement, borderColor: selected ? Colors.text : 'transparent' },
+      ]}>
+      <Pressable
+        accessible={!!onToggle}
+        accessibilityRole={onToggle ? 'button' : undefined}
+        accessibilityLabel={onToggle ? product.name : undefined}
+        accessibilityState={onToggle ? { selected } : undefined}
+        disabled={!onToggle}
+        onPress={onToggle}
+        style={styles.select}>
       <View style={[styles.imageBox, { backgroundColor: theme.backgroundSelected }]}>
         {product.imageUrl ? (
           <Image
@@ -133,6 +181,11 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             contentFit="cover"
             accessibilityIgnoresInvertColors
           />
+        ) : null}
+        {selected ? (
+          <View pointerEvents="none" style={styles.badge}>
+            <Icon name="check" size={14} color={Colors.onAccent} strokeWidth={2} />
+          </View>
         ) : null}
       </View>
       <View style={styles.body}>
@@ -182,6 +235,9 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             themeColor="textSecondary"
             style={styles.fine}>{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
         ) : null}
+      </View>
+      </Pressable>
+      <View style={styles.body}>
         {product.pageUrl && linkLabel ? (
           <Pressable
             accessibilityRole="link"
@@ -207,7 +263,19 @@ const CARD_W = 176;
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.two },
   row: { gap: Spacing.two, paddingVertical: Spacing.one },
-  candidate: { width: CARD_W, borderRadius: 14, padding: Spacing.two, gap: Spacing.two },
+  candidate: { width: CARD_W, borderRadius: 14, padding: Spacing.two, gap: Spacing.two, borderWidth: 2 },
+  select: { gap: Spacing.two },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.text,
+  },
   imageBox: { width: '100%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden' },
   body: { gap: Spacing.half },
   productName: { fontSize: 13, lineHeight: 19 },

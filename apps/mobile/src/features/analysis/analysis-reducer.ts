@@ -15,7 +15,17 @@ export type ResultItem = {
   /** 検出時のアイテム(特徴つき)。手動追加は null。 */
   detected: DetectedItem | null;
   identify: IdentifyState;
+  /** ラベルに入れる商品として選んだ候補。未選択・解除は null。 */
+  chosen?: CandidateKey | null;
+  /** 利用者が選択・解除を操作したか。true なら、A の自動選択で上書きしない。 */
+  choiceTouched?: boolean;
 };
+
+/** 候補の識別(検索結果の中で一意)。 */
+export type CandidateKey = { source: string; productId: string };
+
+export const sameCandidate = (a: CandidateKey | null | undefined, b: CandidateKey): boolean =>
+  !!a && a.source === b.source && a.productId === b.productId;
 
 export type IdentifyState =
   | { status: 'idle' }
@@ -51,6 +61,7 @@ export type AnalysisAction =
   | { type: 'addManual'; id: string; categoryId: string }
   | { type: 'identifyStart'; id: string }
   | { type: 'identifySucceeded'; id: string; response: IdentifyResponse }
+  | { type: 'toggleCandidate'; id: string; source: string; productId: string }
   | { type: 'identifyFailed'; id: string; kind: AnalyzeErrorKind }
   | { type: 'applied' }
   | { type: 'reset' };
@@ -93,7 +104,7 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
       return {
         ...state,
         dirty: true,
-        items: state.items.map((i) => (i.id === action.id ? { ...i, categoryId: action.categoryId, identify: { status: 'idle' } } : i)),
+        items: state.items.map((i) => (i.id === action.id ? { ...i, categoryId: action.categoryId, identify: { status: 'idle' }, chosen: null } : i)),
       };
     case 'setBrand':
       return { ...state, dirty: true, items: state.items.map((i) => (i.id === action.id ? { ...i, brand: action.brand } : i)) };
@@ -111,7 +122,31 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
     case 'identifyStart':
       return withIdentify(state, action.id, { status: 'loading' });
     case 'identifySucceeded':
-      return withIdentify(state, action.id, { status: 'done', response: action.response });
+      return {
+        ...state,
+        dirty: true,
+        items: state.items.map((i) => {
+          if (i.id !== action.id) return i;
+          const { candidates, verdict } = action.response;
+          // 選択中の候補が新しい結果に無ければ外す。利用者がまだ操作していない A のときだけ先頭を自動で選ぶ。
+          let chosen = i.chosen && candidates.some((c) => sameCandidate(i.chosen, c.product)) ? i.chosen : null;
+          const first = candidates[0];
+          if (!i.choiceTouched && verdict === 'identified' && first) {
+            chosen = { source: first.product.source, productId: first.product.productId };
+          }
+          return { ...i, identify: { status: 'done', response: action.response }, chosen };
+        }),
+      };
+    case 'toggleCandidate': {
+      const key = { source: action.source, productId: action.productId };
+      return {
+        ...state,
+        dirty: true,
+        items: state.items.map((i) =>
+          i.id === action.id ? { ...i, chosen: sameCandidate(i.chosen, key) ? null : key, choiceTouched: true } : i,
+        ),
+      };
+    }
     case 'identifyFailed':
       return withIdentify(state, action.id, { status: 'failed', kind: action.kind });
     case 'applied':
