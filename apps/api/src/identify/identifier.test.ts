@@ -1,4 +1,4 @@
-import type { DetectedItem, Product } from '@coordinate/shared';
+import type { DetectedItem, Product, Usage } from '@coordinate/shared';
 
 import { sampleItem } from '../test-utils';
 import type { ProductSearcher, SearchOutcome } from '../search/types';
@@ -187,6 +187,61 @@ describe('Identifier', () => {
 
     it('visibleText に無関係な文字しか無ければ A にならない', async () => {
       const r = await run(nike({ visibleText: ['SALE'] }));
+      expect(r.verdict).toBe('candidates');
+    });
+  });
+  describe('onUsage(失敗した処理の使用量も計上する)', () => {
+    it('検索が両方失敗して 503 相当になっても、検索語生成のトークンを通知する', async () => {
+      const dead = searcher([{ status: 'failed', products: [], calls: 1 }]);
+      const seen: Usage[] = [];
+      await expect(
+        make({ serpapi: dead, rakuten: dead }).identify(img, sampleItem, { onUsage: (u) => seen.push(u) }),
+      ).rejects.toThrow('SearchUnavailableError');
+      expect(seen).toEqual([usage(80, 20)]);
+    });
+
+    it('成功時は、検索語生成と照合のそれぞれを 1 回ずつ通知する', async () => {
+      const seen: Usage[] = [];
+      await make().identify(img, sampleItem, { onUsage: (u) => seen.push(u) });
+      expect(seen).toEqual([usage(80, 20), usage(900, 100)]);
+    });
+
+    it('照合が検証失敗(usage 付き)で例外になっても、その usage を通知し、結果の使用量にも含める', async () => {
+      const seen: Usage[] = [];
+      const err = Object.assign(new Error('ComparisonError'), { usage: usage(500, 50) });
+      const r = await make({
+        comparer: {
+          compare: async () => {
+            throw err;
+          },
+        },
+      }).identify(img, sampleItem, { onUsage: (u) => seen.push(u) });
+      expect(seen).toEqual([usage(80, 20), usage(500, 50)]);
+      expect(r.comparison).toBe('failed');
+      expect(r.usage.claude).toEqual(usage(580, 70));
+    });
+
+    it('検索語生成が検証失敗(usage 付き)で例外になっても、その usage を通知する', async () => {
+      const seen: Usage[] = [];
+      const err = Object.assign(new Error('QueryGenerationError'), { usage: usage(60, 10) });
+      await expect(
+        make({
+          queryGenerator: {
+            generate: async () => {
+              throw err;
+            },
+          },
+        }).identify(img, sampleItem, { onUsage: (u) => seen.push(u) }),
+      ).rejects.toThrow();
+      expect(seen).toEqual([usage(60, 10)]);
+    });
+
+    it('onUsage 自体が例外を投げても、結果の返却を妨げない', async () => {
+      const r = await make().identify(img, sampleItem, {
+        onUsage: () => {
+          throw new Error('boom');
+        },
+      });
       expect(r.verdict).toBe('candidates');
     });
   });

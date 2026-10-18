@@ -1,6 +1,6 @@
 import type { MessagesClient } from '../detector/claude-vision-detector';
 import { sampleItem } from '../test-utils';
-import { QueryGenerator } from './query-generator';
+import { QueryGenerationError, QueryGenerator } from './query-generator';
 
 const reply = (text: string, over: Record<string, unknown> = {}) =>
   ({
@@ -43,6 +43,13 @@ describe('QueryGenerator', () => {
   it('検索語が 1 つも得られなければ GenerationError', async () => {
     const c = client(reply(JSON.stringify({ queries: [] })));
     await expect(new QueryGenerator(c, 'm', 'low').generate(sampleItem)).rejects.toThrow('QueryGenerationError');
+  });
+  it('応答を受け取ったあとの検証失敗では、取得済みの usage を例外に載せる', async () => {
+    for (const r of [reply('nope'), reply('{}', { stop_reason: 'refusal' }), reply(JSON.stringify({ queries: [] }))]) {
+      const err = await new QueryGenerator(client(r), 'm', 'low').generate(sampleItem).catch((e) => e);
+      expect(err).toBeInstanceOf(QueryGenerationError);
+      expect(err.usage).toEqual({ inputTokens: 80, outputTokens: 20 });
+    }
   });
   it('JSON でない・拒否・打ち切りは GenerationError', async () => {
     for (const r of [reply('nope'), reply('{}', { stop_reason: 'refusal' }), reply('{}', { stop_reason: 'max_tokens' })]) {

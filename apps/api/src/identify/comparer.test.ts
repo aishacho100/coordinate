@@ -1,7 +1,7 @@
 import type { MessagesClient } from '../detector/claude-vision-detector';
 import type { Product } from '@coordinate/shared';
 
-import { Comparer } from './comparer';
+import { Comparer, ComparisonError } from './comparer';
 
 const p = (name: string, imageUrl?: string): Product => ({
   source: 'rakuten',
@@ -69,6 +69,12 @@ describe('Comparer', () => {
     for (const r of [reply({}, { stop_reason: 'refusal' }), reply({}, { stop_reason: 'max_tokens' }), { content: [{ type: 'text', text: 'x' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }]) {
       await expect(new Comparer(client(r), 'm', 'low').compare(img, [p('a')])).rejects.toThrow('ComparisonError');
     }
+  });
+  it('応答を受け取ったあとの検証失敗では、取得済みの usage を例外に載せる', async () => {
+    const bad = { content: [{ type: 'text', text: 'x' }], stop_reason: 'end_turn', usage: { input_tokens: 7, output_tokens: 3 } };
+    const err = await new Comparer(client(bad), 'm', 'low').compare(img, [p('a')]).catch((e) => e);
+    expect(err).toBeInstanceOf(ComparisonError);
+    expect(err.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
   });
   it('候補が無ければ Claude を呼ばない', async () => {
     const c = client(reply({ results: [] }));

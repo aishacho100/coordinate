@@ -9,7 +9,11 @@ import { isAllowedImageUrl } from '../search/image-url';
 import type { Judgement } from './verdict';
 
 export class ComparisonError extends Error {
-  constructor(detail: string) {
+  /** 応答を受け取ったあとの失敗では、取得済みの使用量(課金済み)を持つ。 */
+  constructor(
+    detail: string,
+    readonly usage?: Usage,
+  ) {
     super(`ComparisonError: ${detail}`);
     this.name = 'ComparisonError';
   }
@@ -95,17 +99,18 @@ export class Comparer {
       output_config: { effort: this.effort, format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content }],
     });
-    if (res.stop_reason === 'refusal') throw new ComparisonError('refusal');
-    if (res.stop_reason === 'max_tokens') throw new ComparisonError('truncated');
+    const usage: Usage = { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
+    if (res.stop_reason === 'refusal') throw new ComparisonError('refusal', usage);
+    if (res.stop_reason === 'max_tokens') throw new ComparisonError('truncated', usage);
     const text = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text;
     let json: unknown;
     try {
       json = JSON.parse(text ?? '');
     } catch {
-      throw new ComparisonError('not json');
+      throw new ComparisonError('not json', usage);
     }
     const parsed = Output.safeParse(json);
-    if (!parsed.success) throw new ComparisonError('schema');
+    if (!parsed.success) throw new ComparisonError('schema', usage);
 
     const seen = new Set<number>();
     const judgements: Judgement[] = [];
@@ -124,6 +129,6 @@ export class Comparer {
         unconfirmed: r.unconfirmed.slice(0, 5),
       });
     }
-    return { judgements, usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens } };
+    return { judgements, usage };
   }
 }

@@ -72,7 +72,10 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
 
     let result;
     try {
-      result = await deps.identifier.identify(image, item);
+      // Claude の使用量は、応答を受け取るたびに計上する(後続の処理が失敗しても課金されるため)。
+      result = await deps.identifier.identify(image, item, {
+        onUsage: (u) => store.addMonthly(now, { claudeInput: u.inputTokens, claudeOutput: u.outputTokens }),
+      });
     } catch (e) {
       // 画像・キー・検索語・上流の詳細はログに残さない。種類だけ記録する。
       req.log.error({ errorName: e instanceof Error ? e.name : 'unknown', status: (e as { status?: number }).status }, 'identify failed');
@@ -81,7 +84,6 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
         : sendError(reply, 502, 'identify_failed');
     }
 
-    store.addMonthly(now, { claudeInput: result.usage.claude.inputTokens, claudeOutput: result.usage.claude.outputTokens });
     req.log.info(
       {
         verdict: result.verdict,

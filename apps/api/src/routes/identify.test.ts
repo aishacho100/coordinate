@@ -21,8 +21,12 @@ const response: IdentifyResponse = {
   fetchedAt: '2026-10-18T00:00:00.000Z',
   timings: { total: 5 },
 };
-const fakeIdentifier = (impl?: () => Promise<IdentifyResponse>) => {
-  const f = { calls: 0, identify: async () => ((f.calls += 1), impl ? impl() : response) };
+type UsageOpts = { onUsage?: (u: { inputTokens: number; outputTokens: number }) => void };
+const fakeIdentifier = (impl?: (opts: UsageOpts) => Promise<IdentifyResponse>) => {
+  const f = {
+    calls: 0,
+    identify: async (_i: unknown, _item: unknown, opts: UsageOpts = {}) => ((f.calls += 1), impl ? impl(opts) : response),
+  };
   return f;
 };
 
@@ -90,6 +94,29 @@ describe('POST /v1/identify', () => {
     const res = await post(app, await checkerJpeg(), { item: JSON.stringify(big) }, install);
     expect(res.statusCode).toBe(400);
     expect(identifier.calls).toBe(0);
+    await app.close();
+  });
+  it('失敗した処理でも、onUsage で通知された Claude の使用量を月間に計上する', async () => {
+    const store = new FileUsageStore(null);
+    const identifier = fakeIdentifier(async (opts) => {
+      opts.onUsage?.({ inputTokens: 100, outputTokens: 10 });
+      throw new SearchUnavailableError();
+    });
+    const app = buildApp({ config, detector: null, identifier, usageStore: store });
+    const res = await post(app, await checkerJpeg(), { item: itemJson }, install);
+    expect(res.statusCode).toBe(503);
+    expect(store.monthly(new Date())).toMatchObject({ claudeInput: 100, claudeOutput: 10 });
+    await app.close();
+  });
+  it('成功時は onUsage の分だけを計上し、二重計上しない', async () => {
+    const store = new FileUsageStore(null);
+    const identifier = fakeIdentifier(async (opts) => {
+      opts.onUsage?.({ inputTokens: 5, outputTokens: 3 });
+      return response;
+    });
+    const app = buildApp({ config, detector: null, identifier, usageStore: store });
+    expect((await post(app, await checkerJpeg(), { item: itemJson }, install)).statusCode).toBe(200);
+    expect(store.monthly(new Date())).toMatchObject({ claudeInput: 5, claudeOutput: 3 });
     await app.close();
   });
   it('画像でないファイルは 400 invalid_image', async () => {

@@ -7,7 +7,11 @@ import type { Effort } from '../config';
 import type { MessagesClient } from '../detector/claude-vision-detector';
 
 export class QueryGenerationError extends Error {
-  constructor(detail: string) {
+  /** 応答を受け取ったあとの失敗では、取得済みの使用量(課金済み)を持つ。 */
+  constructor(
+    detail: string,
+    readonly usage?: Usage,
+  ) {
     super(`QueryGenerationError: ${detail}`);
     this.name = 'QueryGenerationError';
   }
@@ -55,17 +59,18 @@ export class QueryGenerator {
       output_config: { effort: this.effort, format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(facts) }] }],
     });
-    if (res.stop_reason === 'refusal') throw new QueryGenerationError('refusal');
-    if (res.stop_reason === 'max_tokens') throw new QueryGenerationError('truncated');
+    const usage: Usage = { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
+    if (res.stop_reason === 'refusal') throw new QueryGenerationError('refusal', usage);
+    if (res.stop_reason === 'max_tokens') throw new QueryGenerationError('truncated', usage);
     const text = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text;
     let json: unknown;
     try {
       json = JSON.parse(text ?? '');
     } catch {
-      throw new QueryGenerationError('not json');
+      throw new QueryGenerationError('not json', usage);
     }
     const parsed = Output.safeParse(json);
-    if (!parsed.success) throw new QueryGenerationError('schema');
+    if (!parsed.success) throw new QueryGenerationError('schema', usage);
 
     const seen = new Set<string>();
     const queries: string[] = [];
@@ -76,7 +81,7 @@ export class QueryGenerator {
       queries.push(t);
       if (queries.length === 3) break;
     }
-    if (queries.length === 0) throw new QueryGenerationError('empty');
-    return { queries, usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens } };
+    if (queries.length === 0) throw new QueryGenerationError('empty', usage);
+    return { queries, usage };
   }
 }

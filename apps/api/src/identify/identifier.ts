@@ -45,10 +45,33 @@ type Collected = { products: Product[]; status: SearchStatus; calls: number };
 export class Identifier {
   constructor(private readonly deps: Deps) {}
 
-  async identify(image: DetectorImage, item: DetectedItem): Promise<IdentifyResponse> {
+  /**
+   * onUsage は、Claude の応答を受け取るたびに(成功・検証失敗を問わず)呼ばれる。
+   * 後続の処理が失敗しても、課金された使用量を呼び出し側が計上できるようにするため。
+   */
+  async identify(
+    image: DetectorImage,
+    item: DetectedItem,
+    opts: { onUsage?: (usage: Usage) => void } = {},
+  ): Promise<IdentifyResponse> {
     const t0 = performance.now();
     const now = (this.deps.now ?? (() => new Date()))();
-    const gen = await this.deps.queryGenerator.generate(item);
+    const report = (u: Usage) => {
+      try {
+        opts.onUsage?.(u);
+      } catch {
+        // 計上側の失敗で結果を妨げない。
+      }
+    };
+    let gen;
+    try {
+      gen = await this.deps.queryGenerator.generate(item);
+    } catch (e) {
+      const u = usageOf(e);
+      if (u) report(u);
+      throw e;
+    }
+    report(gen.usage);
 
     const [serp, rak] = await Promise.all([
       this.collect(this.deps.serpapi, gen.queries),
@@ -82,10 +105,16 @@ export class Identifier {
     } else {
       try {
         const cmp = await this.deps.comparer.compare(image, merged);
+        report(cmp.usage);
         claude = add(claude, cmp.usage);
         comparison = 'done';
         ({ verdict, candidates } = decideVerdict({ brandRead, candidates: merged, judgements: cmp.judgements }));
-      } catch {
+      } catch (e) {
+        const u = usageOf(e);
+        if (u) {
+          report(u);
+          claude = add(claude, u);
+        }
         // 照合できなかった場合は、確定させず、候補を「未照合」として返す。
         comparison = 'failed';
         verdict = 'candidates';
@@ -143,6 +172,12 @@ export class Identifier {
     }
     return out;
   }
+}
+
+/** 応答を受け取ったあとの検証失敗(QueryGenerationError・ComparisonError)が持つ使用量。 */
+function usageOf(e: unknown): Usage | undefined {
+  const u = (e as { usage?: Usage } | null)?.usage;
+  return u && Number.isFinite(u.inputTokens) && Number.isFinite(u.outputTokens) ? u : undefined;
 }
 
 const add = (a: Usage, b: Usage): Usage => ({
