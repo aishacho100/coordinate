@@ -1,0 +1,12 @@
+const HOSTS = [/^encrypted-tbn\d\.gstatic\.com$/, /^thumbnail\.image\.rakuten\.co\.jp$/];
+
+/** 候補の画像 URL を Claude に渡してよいか。https かつ許可ドメインのみ。 */
+export function isAllowedImageUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  return u.protocol === 'https:' && HOSTS.some((re) => re.test(u.hostname));
+}
