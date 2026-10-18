@@ -1,4 +1,5 @@
 import {
+  clampLabelPosition,
   computeConnector,
   computeCrop,
   cropAspectRatio,
@@ -105,6 +106,7 @@ export function EditorCanvas({ photo, doc, width, selectedId = null, cropMode = 
           interactive={!!handlers && !cropMode}
           handlers={handlers}
           onLayout={onLabelLayout}
+          size={sizes[l.id]}
         />
       ))}
 
@@ -135,7 +137,8 @@ function Connector({
   if (!size) return null;
   const s = resolveLabelStyle(template, label);
   if (s.lineWidth <= 0) return null;
-  const rect = { x: label.position.x * width, y: label.position.y * height, w: size.w, h: size.h };
+  const pos = clampLabelPosition(label.position, size, { w: width, h: height });
+  const rect = { x: pos.x * width, y: pos.y * height, w: size.w, h: size.h };
   const c = computeConnector(rect, { x: label.anchor.x * width, y: label.anchor.y * height }, s.arrow, unit);
   const sw = s.lineWidth * unit;
   return (
@@ -167,6 +170,7 @@ function DraggableLabel({
   interactive,
   handlers,
   onLayout,
+  size,
 }: {
   label: Label;
   template: TemplateDefinition;
@@ -178,7 +182,9 @@ function DraggableLabel({
   interactive: boolean;
   handlers: CanvasHandlers | undefined;
   onLayout: (id: string, e: LayoutChangeEvent) => void;
+  size: Size | undefined;
 }) {
+  const pos = size ? clampLabelPosition(label.position, size, { w: width, h: height }) : label.position;
   const pan = Gesture.Pan()
     .runOnJS(true)
     .enabled(interactive)
@@ -195,7 +201,7 @@ function DraggableLabel({
 
   return (
     <GestureDetector gesture={Gesture.Race(pan, tap)}>
-      <View style={{ position: 'absolute', left: label.position.x * width, top: label.position.y * height }}>
+      <View style={{ position: 'absolute', left: pos.x * width, top: pos.y * height }}>
         <LabelChip
           label={label}
           template={template}

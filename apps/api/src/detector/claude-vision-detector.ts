@@ -9,7 +9,10 @@ import { OUTPUT_JSON_SCHEMA, RawOutputSchema } from './schema';
 
 /** テストで差し替えられるよう、必要な部分だけを型にする。 */
 export type MessagesClient = {
-  messages: { create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> };
+  messages: { create(
+      params: Anthropic.MessageCreateParamsNonStreaming,
+      options?: { timeout?: number },
+    ): Promise<Anthropic.Message> };
 };
 
 export type DetectionErrorCode = 'refusal' | 'truncated' | 'invalid_output';

@@ -1,0 +1,315 @@
+import type { IdentifyCandidate, IdentifyResponse, IdentifyVerdict, SearchStatus } from '@coordinate/shared';
+import { Image } from 'expo-image';
+import { useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+
+import { Icon } from '@/components/icon';
+import { ThemedText } from '@/components/themed-text';
+import { Colors, Spacing } from '@/constants/theme';
+import { formatAsOf, formatPrice } from '@/lib/format-price';
+import { useTheme } from '@/hooks/use-theme';
+
+const CARD_W = 176;
+
+const HEADING: Record<IdentifyVerdict, string> = {
+  identified: '特定できました',
+  candidates: '候補が見つかりました',
+  unidentified: '特定できませんでした',
+};
+
+const SUBTEXT: Partial<Record<IdentifyVerdict, string>> = {
+  candidates: '似ている商品です。同じ商品と断定はできません。',
+  unidentified: '手がかりが足りず、商品名やブランドを決められませんでした。',
+};
+
+const SEARCH_SUBJECT = { lens: '画像検索は', serpapi: 'Google ショッピングの検索は', rakuten: '楽天市場の検索は' } as const;
+const SEARCH_REASON: Record<Exclude<SearchStatus, 'ok'>, string> = {
+  not_consented: '同意が必要です',
+  not_configured: '未設定です',
+  budget_exhausted: '今月の上限に達しました',
+  failed: '失敗しました',
+};
+
+const PRICE_LABEL: Record<string, string> = {
+  rakuten: '楽天市場の販売価格',
+  google_shopping: 'Google ショッピングの表示価格',
+};
+
+const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
+
+/** 商品特定の結果。確信度の数値は出さない(並び順は API 側で済んでいる)。 */
+export function ProductCandidates({
+  response,
+  chosen = null,
+  onToggle,
+  autoApplied = false,
+}: {
+  response: IdentifyResponse;
+  /** ラベルに入れる商品として選んでいる候補。 */
+  chosen?: { source: string; productId: string } | null;
+  /** 渡すと、候補のカードを押して選択・解除できる。 */
+  onToggle?: (key: { source: string; productId: string }) => void;
+  /** 特定(A)の先頭を自動で選んだままか。ラベルに入れたことと値段の注意を出す。 */
+  autoApplied?: boolean;
+}) {
+  const unavailable = (['lens', 'serpapi', 'rakuten'] as const)
+    .filter((k) => response.searches[k] !== 'ok')
+    .map((k) => {
+      const status = response.searches[k] as Exclude<SearchStatus, 'ok'>;
+      if (k === 'lens' && status === 'not_consented') return '画像検索は使っていません(同意が必要です)。';
+      return `${SEARCH_SUBJECT[k]}${SEARCH_REASON[status]}。`;
+    });
+  const subtext = SUBTEXT[response.verdict];
+  // 楽天の結果を表示しているときだけ出す(Lens だけで足りて楽天を使っていないときは出さない)。
+  const showRakutenCredit =
+    response.verdict !== 'unidentified' && response.candidates.some((c) => c.product.source === 'rakuten');
+
+  return (
+    <View style={styles.wrap}>
+      <ThemedText type="subtitle">{HEADING[response.verdict]}</ThemedText>
+      {subtext ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {subtext}
+        </ThemedText>
+      ) : null}
+      {onToggle && autoApplied && chosen ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          ラベルに入れました。値段は出品時点です
+        </ThemedText>
+      ) : null}
+      {onToggle && !chosen && response.verdict === 'candidates' && response.candidates.length > 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          選ぶとラベルに入ります
+        </ThemedText>
+      ) : null}
+      {response.comparison === 'failed' ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          画像との照合ができなかったため、確定できません
+        </ThemedText>
+      ) : null}
+
+      {response.verdict !== 'unidentified' && response.candidates.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {response.candidates.map((c) => (
+            <Candidate
+              key={`${c.product.source}:${c.product.productId}`}
+              candidate={c}
+              selected={!!chosen && chosen.source === c.product.source && chosen.productId === c.product.productId}
+              onToggle={onToggle ? () => onToggle({ source: c.product.source, productId: c.product.productId }) : undefined}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+
+      {unavailable.length > 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {unavailable.join('')}
+        </ThemedText>
+      ) : null}
+
+      {showRakutenCredit ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Supported by Rakuten Developers"
+          onPress={() => void Linking.openURL(RAKUTEN_CREDIT_URL)}
+          hitSlop={12}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.credit}>
+            Supported by Rakuten Developers
+          </ThemedText>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function hostnameOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+function Candidate({
+  candidate,
+  selected,
+  onToggle,
+}: {
+  candidate: IdentifyCandidate;
+  selected: boolean;
+  onToggle?: () => void;
+}) {
+  const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const { product, matched, unconfirmed } = candidate;
+  const hasDetail = matched.length > 0 || unconfirmed.length > 0;
+  const price = product.price;
+  const priceLabel = PRICE_LABEL[product.source];
+  const asOf = price ? formatAsOf(price.fetchedAt) : '';
+  // Lens の販売元は外部の文字列で遷移先を偽れるため、リンク文言には実際の遷移先のホスト名を使う。
+  const lensHost = product.source === 'google_lens' ? hostnameOf(product.pageUrl) : null;
+
+  const linkLabel =
+    product.source === 'google_shopping'
+      ? 'Google ショッピングで見る'
+      : product.source === 'rakuten'
+        ? '楽天市場で見る'
+        : product.source === 'google_lens'
+          ? lensHost
+            ? `${lensHost}で見る`
+            : '商品ページを見る'
+          : null;
+
+  const same = candidate.matchType === 'identical';
+
+  return (
+    <View
+      style={[
+        styles.candidate,
+        { backgroundColor: theme.backgroundElement, borderColor: selected ? Colors.text : 'transparent' },
+      ]}>
+      <Pressable
+        accessible={!!onToggle}
+        accessibilityRole={onToggle ? 'button' : undefined}
+        accessibilityLabel={onToggle ? product.name : undefined}
+        accessibilityState={onToggle ? { selected } : undefined}
+        disabled={!onToggle}
+        onPress={onToggle}
+        style={styles.select}>
+      <View style={[styles.imageBox, { backgroundColor: theme.backgroundSelected }]}>
+        {product.imageUrl ? (
+          <Image
+            source={{ uri: product.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
+        {selected ? (
+          <View pointerEvents="none" style={styles.badge}>
+            <Icon name="check" size={14} color={Colors.onAccent} strokeWidth={2} />
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.body}>
+        <ThemedText type="small" style={styles.productName} numberOfLines={2} ellipsizeMode="tail">
+          {product.name}
+        </ThemedText>
+        <View style={styles.priceRow}>
+          {price ? (
+            <ThemedText type="subtitle" style={styles.price}>
+              {formatPrice(price.amount, price.currency)}
+            </ThemedText>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.noPrice}>
+              価格は取得できませんでした
+            </ThemedText>
+          )}
+          <View accessible accessibilityLabel={same ? '写真と同じ' : '似ている'} style={styles.mark}>
+            <Icon name={same ? 'check' : 'similar'} size={18} color={same ? Colors.accent : Colors.textSecondary} />
+          </View>
+        </View>
+        {price && priceLabel ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.fine}>
+            {priceLabel}
+          </ThemedText>
+        ) : null}
+        {price && asOf ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.fine} numberOfLines={1}>
+            {asOf}
+          </ThemedText>
+        ) : null}
+        {product.seller ? (
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.fine}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {product.seller}
+          </ThemedText>
+        ) : null}
+      </View>
+      </Pressable>
+      {hasDetail ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? '閉じる' : '詳しく見る'}
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((v) => !v)}
+          style={styles.expand}>
+          <View style={styles.expandDisc}>
+            <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={18} color={Colors.text} />
+          </View>
+        </Pressable>
+      ) : null}
+      <View style={styles.linkRow}>
+        {product.pageUrl && linkLabel ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={linkLabel}
+            onPress={() => void Linking.openURL(product.pageUrl as string)}
+            hitSlop={12}
+            style={styles.link}>
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              style={[styles.fine, styles.linkText, { borderBottomColor: theme.text }]}>
+              {linkLabel}
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <View style={styles.link} />
+        )}
+      </View>
+      {expanded ? (
+        <View style={styles.body}>
+          {matched.length > 0 ? (
+            <ThemedText type="small" style={styles.fine}>{`一致した点: ${matched.join('、')}`}</ThemedText>
+          ) : null}
+          {unconfirmed.length > 0 ? (
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              style={styles.fine}>{`確認できていない点: ${unconfirmed.join('、')}`}</ThemedText>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+
+const styles = StyleSheet.create({
+  wrap: { gap: Spacing.two },
+  row: { gap: Spacing.two, paddingVertical: Spacing.one },
+  candidate: { width: CARD_W, borderRadius: 14, padding: Spacing.two, gap: Spacing.two, borderWidth: 2 },
+  select: { gap: Spacing.two },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.text,
+  },
+  imageBox: { width: '100%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden' },
+  body: { gap: Spacing.half },
+  productName: { fontSize: 13, lineHeight: 19 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one },
+  price: { fontSize: 17, lineHeight: 26, flexShrink: 1 },
+  noPrice: { flexShrink: 1, fontSize: 12 },
+  mark: { minWidth: 24, minHeight: 24, alignItems: 'center', justifyContent: 'center' },
+  fine: { fontSize: 11, lineHeight: 17, letterSpacing: 0.2 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
+  expandDisc: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
+  link: { flexShrink: 1, alignSelf: 'center' },
+  expand: { position: 'absolute', top: Spacing.two + (CARD_W - Spacing.two * 2 - 4) - 44, right: Spacing.two, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  linkText: { borderBottomWidth: StyleSheet.hairlineWidth * 2 },
+  credit: { fontSize: 11, lineHeight: 16, letterSpacing: 0.6 },
+});

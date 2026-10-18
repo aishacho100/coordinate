@@ -53,7 +53,7 @@ export function SwitchRow({
         accessibilityLabel={label}
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: theme.backgroundSelected, true: theme.text }}
+        trackColor={{ false: theme.backgroundSelected, true: theme.accent }}
         thumbColor={theme.background}
       />
     </View>
@@ -128,12 +128,15 @@ export function Swatches({
             accessibilityLabel={`${label} ${c}`}
             accessibilityState={{ selected: c.toLowerCase() === value.toLowerCase() }}
             onPress={() => onChange(c)}
-            style={[
-              styles.swatch,
-              { backgroundColor: c, borderColor: c.toLowerCase() === value.toLowerCase() ? theme.text : theme.border },
-              c.toLowerCase() === value.toLowerCase() && styles.swatchOn,
-            ]}
-          />
+            style={styles.swatchHit}>
+            <View
+              style={[
+                styles.swatch,
+                { backgroundColor: c, borderColor: c.toLowerCase() === value.toLowerCase() ? theme.text : theme.border },
+                c.toLowerCase() === value.toLowerCase() && styles.swatchOn,
+              ]}
+            />
+          </Pressable>
         ))}
       </View>
     </View>
@@ -142,7 +145,7 @@ export function Swatches({
 
 const styles = StyleSheet.create({
   chip: {
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth * 2,
@@ -152,15 +155,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth * 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepValue: { minWidth: 44, textAlign: 'center' },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  swatch: { width: 32, height: 32, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth * 2 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap' },
+  swatchHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  swatch: { width: 30, height: 30, borderRadius: 15, borderWidth: StyleSheet.hairlineWidth * 2 },
   swatchOn: { borderWidth: 2 },
 });

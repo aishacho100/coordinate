@@ -1,12 +1,13 @@
 # 進捗と再開メモ
 
-最終更新: Phase 3 完了(エミュレータで実際の Claude を呼んだ通し確認まで)。
+最終更新: Phase 4(商品特定)と UI 刷新(ダーク・ギャラリー)の実装、実 API の評価、エミュレータでの通し確認が完了。main への統合は未実施。
 
 ## 現在地
 
 - Phase 1(基盤)、Phase 2(画像編集)、Phase 3(AI アイテム検出)完了。**次は Phase 4(商品特定)**。着手前に必要なことは下の「次: Phase 4」を参照。
-- Git: Phase 3 はブランチ `phase3-detection` で作業(main へは未マージ)。
-- テスト: api 62 / mobile 73 / layout 43 / shared 7、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
+- Phase 4(商品特定)の実装(api の `/v1/identify`、SerpApi・楽天の検索、Claude の照合、モバイルの「商品を探す」)はブランチ `phase4-identification` で完了。実 API の評価は実施済み(結果は `docs/phase4-evaluation.md`)。エミュレータでの通し確認も 2026-10-18 に実施済み(下の「エミュレータでの通し確認(UI 刷新後)」)。
+- Git: Phase 3 はブランチ `phase3-detection`、Phase 4 は `phase4-identification` で作業(いずれも main へは未マージ)。
+- テスト: api 161 / mobile 110 / layout 43 / shared 14、すべて成功(`npm test`)。型検査(`npm run typecheck`)・lint(`npm run lint`)もエラーなし。
 
 ## 開発ビルドでの保存確認(完了)
 
@@ -104,10 +105,13 @@ npm start -w api          # http://localhost:8787 。/health で確認
 ```
 
 評価スクリプト: `npm run eval -w api`(写真は `apps/api/eval/photos/`、Git 管理外)。
+商品特定の評価: `npm run eval:identify -w api -- --max-searches 40 [--photos a,b]`(実 API を呼ぶ。SerpApi は指定回数で止まる。結果は `apps/api/eval/results/identify-<日時>.json`、Git 管理外)。Phase 4 の設定は `.env.example` を参照。
 
-## 次: Phase 4(商品特定)
+## 次: Phase 4 の残り(評価と実機確認)
 
-着手前に必要なこと(いずれも未着手):
+実装は完了。実 API の評価は 2026-10-18 に実施済み(A 3 / B 11 / C 0、`docs/phase4-evaluation.md`)。残りは、エミュレータでの通し確認(未実施)。UI は、ダーク・ギャラリーへの刷新を並行して進行中(`docs/superpowers/specs/2026-10-18-dark-visual-redesign-design.md`、手順 1・2 完了、手順 3 作業中)。
+
+(旧)着手前に必要だったこと:
 
 1. SerpApi・楽天市場 API の公式ドキュメント・料金・利用規約の調査と、ユーザーへの報告
 2. SerpApi の API キーの取得(ユーザー)
@@ -121,3 +125,10 @@ npm start -w api          # http://localhost:8787 。/health で確認
 2. `Detector` / `Embedder` / `CatalogProvider` / `Reranker` のインターフェース(`packages/shared` に型を追加)
 3. 写真品質評価をクライアント側かサーバー側のどちらで行うか
 4. Anthropic モデルの選定(コスト・精度の比較。実測してから決める)
+
+## エミュレータでの通し確認(UI 刷新後、2026-10-18)
+
+確認できたこと(Pixel_7_API_35、実際の API と Lens): ホーム(白黒の背景写真、ロゴ、金の「＋」) → 写真選択 → 解析(3 アイテム、点がアイテムの位置に出る) → 商品を探す(画像検索の同意カードが出る。保持期間の注記つき) → 同意して探す(A「特定できました」、NIKE CJ4864-657、Mercari ¥2,800) → 先頭候補が自動で選ばれ、編集画面のラベルにブランド・短い商品名・型番・値段が入る → 線が各アイテムの位置から出る → 戻る操作で確認ダイアログが出る。
+- 新しいネイティブ依存(expo-linear-gradient)を足したので、開発ビルドの作り直しが必要だった。`ANDROID_HOME` を設定して `npx expo run:android --no-bundler`(Windows では未設定だと SDK が見つからず失敗する)。
+- 気づいた点: 結果画面は写真が大きく、探すボタンが画面の下にあってスクロールが必要。候補カードの文字(一致した点・確認できていない点)が多い。ラベルの商品名に「(ナイキ)」のようなブランドの読みが残る。
+- 未確認: 商品リンクのタップ(ブラウザが開くか)、楽天リンク、C(特定できず)の画面、画像検索を断った場合(テキスト検索のみ)、実機。

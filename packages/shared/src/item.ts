@@ -72,6 +72,18 @@ export type IdentificationLevel = z.infer<typeof IdentificationLevelSchema>;
 
 export const PriceKindSchema = z.enum(['list', 'sale', 'market', 'estimated', 'manual']);
 
+/** 商品ページ・画像の URL は https のみ(http や javascript: は受け付けない)。 */
+const HttpsUrl = z
+  .string()
+  .url()
+  .refine((u) => {
+    try {
+      return new URL(u).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, 'https の URL のみ');
+
 export const ProductSchema = z.object({
   source: z.string().min(1),
   productId: z.string().min(1),
@@ -79,8 +91,10 @@ export const ProductSchema = z.object({
   name: z.string().min(1),
   modelNumber: z.string().optional(),
   color: z.string().optional(),
-  imageUrl: z.string().url().optional(),
-  pageUrl: z.string().url().optional(),
+  imageUrl: HttpsUrl.optional(),
+  pageUrl: HttpsUrl.optional(),
+  /** 販売元(Google ショッピングの source など)。 */
+  seller: z.string().optional(),
   price: z
     .object({
       amount: z.number().nonnegative(),
@@ -101,23 +115,38 @@ export const ProductCandidateSchema = z.object({
 });
 export type ProductCandidate = z.infer<typeof ProductCandidateSchema>;
 
+/** 検出項目の長さ・個数の上限。クライアントから届く item が Claude の入力を膨らませないようにする。 */
+export const ITEM_LIMITS = {
+  id: 100,
+  colorsCount: 10,
+  colorLength: 40,
+  visibleTextCount: 30,
+  visibleTextLength: 200,
+  freeText: 500,
+  brandCandidatesCount: 5,
+  brandName: 100,
+  candidatesCount: 10,
+} as const;
+
 export const DetectedItemSchema = z.object({
-  id: z.string().min(1),
-  categoryId: z.string().min(1),
+  id: z.string().min(1).max(ITEM_LIMITS.id),
+  categoryId: z.string().min(1).max(ITEM_LIMITS.id),
   box: BoxSchema,
   appearance: z.object({
-    colors: z.array(z.string()),
-    pattern: z.string().optional(),
-    material: z.string().optional(),
-    visibleText: z.array(z.string()),
-    notes: z.string().optional(),
+    colors: z.array(z.string().max(ITEM_LIMITS.colorLength)).max(ITEM_LIMITS.colorsCount),
+    pattern: z.string().max(ITEM_LIMITS.freeText).optional(),
+    material: z.string().max(ITEM_LIMITS.freeText).optional(),
+    visibleText: z.array(z.string().max(ITEM_LIMITS.visibleTextLength)).max(ITEM_LIMITS.visibleTextCount),
+    notes: z.string().max(ITEM_LIMITS.freeText).optional(),
   }),
-  brandCandidates: z.array(z.object({ name: z.string(), score: z.number().min(0).max(1) })),
-  candidates: z.array(ProductCandidateSchema),
+  brandCandidates: z
+    .array(z.object({ name: z.string().max(ITEM_LIMITS.brandName), score: z.number().min(0).max(1) }))
+    .max(ITEM_LIMITS.brandCandidatesCount),
+  candidates: z.array(ProductCandidateSchema).max(ITEM_LIMITS.candidatesCount),
   confidence: ConfidenceSchema,
   level: IdentificationLevelSchema,
   reviewState: z.enum(['auto', 'confirmed', 'corrected', 'removed', 'manual']),
-  rationale: z.string(),
-  modelVersion: z.string(),
+  rationale: z.string().max(ITEM_LIMITS.freeText),
+  modelVersion: z.string().max(ITEM_LIMITS.id),
 });
 export type DetectedItem = z.infer<typeof DetectedItemSchema>;

@@ -14,6 +14,10 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   analysis_failed: '解析に失敗しました。時間をおいて、もう一度お試しください。',
   not_configured: '解析サーバーが設定されていません。',
   rate_limited: '短時間にリクエストが集中しています。少し待ってからお試しください。',
+  invalid_request: 'リクエストの内容が正しくありません。',
+  quota_exceeded: '本日の利用上限に達しました。明日またお試しください。',
+  search_unavailable: '商品検索が現在利用できません。',
+  identify_failed: '商品の特定に失敗しました。時間をおいて、もう一度お試しください。',
 };
 
 export function sendError(reply: FastifyReply, status: number, error: ApiErrorCode) {

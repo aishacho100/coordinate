@@ -43,3 +43,82 @@ describe('loadConfig', () => {
     expect(c.pricing).toBeNull(); // 片方だけでは概算しない
   });
 });
+
+describe('loadConfig: 商品検索', () => {
+  it('未設定なら検索は使えず、上限は既定値', () => {
+    const c = loadConfig({});
+    expect(c.serpapiKey).toBeNull();
+    expect(c.lensEnabled).toBe(false);
+    expect(c.rakuten).toBeNull();
+    expect(c.limits).toEqual({
+      searchesPerProviderPerItem: 2,
+      cacheTtlMs: 3_600_000,
+      identifyPerInstallPerDay: 30,
+      identifyPerIpPerDay: 90,
+      serpapiMonthly: 200,
+      searchTimeoutMs: 15_000,
+      lensUploadTimeoutMs: 15_000,
+      lensSearchTimeoutMs: 45_000,
+      identifyDeadlineMs: 100_000,
+      serpapiHourlyLimit: 45,
+    });
+    expect(c.serpapiCostPerSearchUsd).toBeNull();
+    expect(c.usageFile).toBe('data/usage.json');
+  });
+  it('SERPAPI_HOURLY_LIMIT は正の数のみ。既定は 45', () => {
+    expect(loadConfig({ SERPAPI_HOURLY_LIMIT: '30' }).limits.serpapiHourlyLimit).toBe(30);
+    for (const bad of ['0', '-1', 'x', '']) expect(loadConfig({ SERPAPI_HOURLY_LIMIT: bad }).limits.serpapiHourlyLimit).toBe(45);
+  });
+  it('IDENTIFY_DEADLINE_SECONDS は正の数のみ。上限は 150 秒、不正なら既定の 100 秒', () => {
+    expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: '90' }).limits.identifyDeadlineMs).toBe(90_000);
+    expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: '999' }).limits.identifyDeadlineMs).toBe(150_000);
+    for (const bad of ['0', '-5', 'abc', '']) {
+      expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: bad }).limits.identifyDeadlineMs).toBe(100_000);
+    }
+  });
+  it('SERPAPI_API_KEY があれば lensEnabled が true になる', () => {
+    expect(loadConfig({ SERPAPI_API_KEY: 's' }).lensEnabled).toBe(true);
+    expect(loadConfig({ SERPAPI_API_KEY: '  ' }).lensEnabled).toBe(false);
+  });
+  it('楽天は applicationId と accessKey がそろったときだけ有効(affiliateId は任意)', () => {
+    expect(loadConfig({ RAKUTEN_APPLICATION_ID: 'a' }).rakuten).toBeNull();
+    expect(loadConfig({ RAKUTEN_APPLICATION_ID: 'a', RAKUTEN_ACCESS_KEY: 'k' }).rakuten).toEqual({
+      applicationId: 'a',
+      accessKey: 'k',
+      affiliateId: null,
+    });
+    expect(
+      loadConfig({ RAKUTEN_APPLICATION_ID: 'a', RAKUTEN_ACCESS_KEY: 'k', RAKUTEN_AFFILIATE_ID: 'x' }).rakuten
+        ?.affiliateId,
+    ).toBe('x');
+  });
+  it('数値の設定を読む。不正な値は既定値に戻す', () => {
+    const c = loadConfig({
+      SERPAPI_API_KEY: 's',
+      SERPAPI_MONTHLY_LIMIT: '100',
+      SEARCH_CACHE_TTL_SECONDS: '60',
+      SERPAPI_COST_PER_SEARCH_USD: '0.025',
+      IDENTIFY_DAILY_LIMIT: 'abc',
+    });
+    expect(c.serpapiKey).toBe('s');
+    expect(c.limits.serpapiMonthly).toBe(100);
+    expect(c.limits.cacheTtlMs).toBe(60_000);
+    expect(c.serpapiCostPerSearchUsd).toBe(0.025);
+    expect(c.limits.identifyPerInstallPerDay).toBe(30);
+    expect(c.limits.identifyPerIpPerDay).toBe(90);
+  });
+  it('検索キャッシュの保持時間は最大 3600 秒に収める(楽天の規約: メモリ上の短時間のみ)', () => {
+    expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '86400' }).limits.cacheTtlMs).toBe(3_600_000);
+    expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '3600' }).limits.cacheTtlMs).toBe(3_600_000);
+    expect(loadConfig({}).limits.cacheTtlMs).toBe(3_600_000);
+  });
+  it('Lens のタイムアウトは秒で指定でき、不正な値は既定値、上限は 120 秒', () => {
+    const c = loadConfig({ LENS_UPLOAD_TIMEOUT_SECONDS: '20', LENS_SEARCH_TIMEOUT_SECONDS: '60' });
+    expect(c.limits.lensUploadTimeoutMs).toBe(20_000);
+    expect(c.limits.lensSearchTimeoutMs).toBe(60_000);
+    const bad = loadConfig({ LENS_UPLOAD_TIMEOUT_SECONDS: '-1', LENS_SEARCH_TIMEOUT_SECONDS: 'abc' });
+    expect(bad.limits.lensUploadTimeoutMs).toBe(15_000);
+    expect(bad.limits.lensSearchTimeoutMs).toBe(45_000);
+    expect(loadConfig({ LENS_SEARCH_TIMEOUT_SECONDS: '999' }).limits.lensSearchTimeoutMs).toBe(120_000);
+  });
+});

@@ -4,6 +4,7 @@ import type { Dispatch } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Chip, Stepper, SwitchRow, Swatches } from '@/components/controls';
+import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,6 +22,7 @@ const ASPECTS: { value: EditDocument['aspect']; label: string }[] = [
   { value: 'original', label: '元の比率' },
 ];
 
+/** 写真タブ: 縦横比・切り取り位置・回転。 */
 export function PhotoPanel({
   doc,
   dispatch,
@@ -34,7 +36,6 @@ export function PhotoPanel({
 }) {
   return (
     <View style={styles.panel}>
-      <ThemedText type="smallBold">縦横比</ThemedText>
       <View style={styles.wrap}>
         {ASPECTS.map((a) => (
           <Chip
@@ -46,20 +47,27 @@ export function PhotoPanel({
         ))}
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        写真を指でドラッグすると、切り取る位置を動かせます。ラベルを置く前に整えるのがおすすめです。
+        写真をドラッグすると、切り取る位置を動かせます。ラベルを置く前に整えるのがおすすめです。
       </ThemedText>
       <View style={styles.wrap}>
-        <Chip label={busy ? '回転中…' : '90°回転'} selected={false} onPress={busy ? () => {} : onRotate} />
+        <IconButton
+          icon="rotate"
+          variant="outline"
+          size={48}
+          accessibilityLabel={busy ? '回転中' : '90°回転'}
+          disabled={busy}
+          onPress={onRotate}
+        />
       </View>
     </View>
   );
 }
 
+/** テンプレートタブ。 */
 export function TemplatePanel({ doc, dispatch }: { doc: EditDocument; dispatch: Dispatcher }) {
   const theme = useTheme();
   return (
     <View style={styles.panel}>
-      <ThemedText type="smallBold">テンプレート</ThemedText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.two }}>
         {TEMPLATES.map((t) => {
           const on = t.id === doc.templateId;
@@ -70,7 +78,10 @@ export function TemplatePanel({ doc, dispatch }: { doc: EditDocument; dispatch: 
               accessibilityLabel={`テンプレート ${t.nameJa}`}
               accessibilityState={{ selected: on }}
               onPress={() => dispatch({ type: 'setTemplate', templateId: t.id })}
-              style={[styles.tplCard, { borderColor: on ? theme.text : theme.border, borderWidth: on ? 2 : 1 }]}>
+              style={[
+                styles.tplCard,
+                { backgroundColor: theme.backgroundElement, borderColor: on ? theme.text : theme.border, borderWidth: on ? 1.5 : 1 },
+              ]}>
               <ThemedText type="smallBold">{t.nameJa}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={3}>
                 {t.description}
@@ -80,8 +91,20 @@ export function TemplatePanel({ doc, dispatch }: { doc: EditDocument; dispatch: 
         })}
       </ScrollView>
       <View style={styles.wrap}>
-        <Chip label="配置を自動に戻す" selected={false} onPress={() => dispatch({ type: 'resetLayout' })} />
-        <Chip label="文字・線の見た目を戻す" selected={false} onPress={() => dispatch({ type: 'resetStyles' })} />
+        <IconButton
+          icon="reset"
+          variant="outline"
+          size={48}
+          accessibilityLabel="配置を自動に戻す"
+          onPress={() => dispatch({ type: 'resetLayout' })}
+        />
+        <IconButton
+          icon="text"
+          variant="outline"
+          size={48}
+          accessibilityLabel="文字・線の見た目を戻す"
+          onPress={() => dispatch({ type: 'resetStyles' })}
+        />
       </View>
     </View>
   );
@@ -97,26 +120,51 @@ const ARROWS: { value: LabelStyle['arrow']; label: string }[] = [
   { value: 'dot', label: '丸' },
 ];
 
-export function LabelPanel({
-  doc,
-  selectedId,
-  dispatch,
-}: {
+type LabelPanelProps = {
   doc: EditDocument;
   selectedId: string | null;
   dispatch: Dispatcher;
-}) {
-  const theme = useTheme();
+};
+
+function useSelectedLabel(doc: EditDocument, selectedId: string | null) {
   const template = getTemplate(doc.templateId);
   const label = doc.labels.find((l) => l.id === selectedId) ?? null;
   const style = label ? resolveLabelStyle(template, label) : null;
+  return { label, style };
+}
 
-  const commit = (patch: Parameters<typeof dispatchCommit>[2]) => dispatchCommit(dispatch, label?.id ?? '', patch);
-  const inputStyle = [styles.input, { color: theme.text, borderColor: theme.border, fontFamily: Fonts.sans }];
+function NoLabelHint({ doc }: { doc: EditDocument }) {
+  return (
+    <ThemedText type="small" themeColor="textSecondary">
+      {doc.labels.length === 0
+        ? 'ラベルタブの＋で、ブランド名・商品名・価格を入れられます。ラベルは写真上でドラッグして動かせます。'
+        : '編集するラベルを選んでください。写真上のラベルをタップしても選べます。'}
+    </ThemedText>
+  );
+}
+
+function commitLabel(
+  dispatch: Dispatcher,
+  id: string,
+  patch: Extract<EditorAction, { type: 'commitLabel' }>['patch'],
+) {
+  if (!id) return;
+  dispatch({ type: 'commitLabel', id, patch });
+}
+
+/** ラベルタブ: 中身(文字・表示)・フォント・大きさ。 */
+export function LabelPanel({ doc, selectedId, dispatch }: LabelPanelProps) {
+  const theme = useTheme();
+  const { label, style } = useSelectedLabel(doc, selectedId);
+
+  const commit = (patch: Parameters<typeof commitLabel>[2]) => commitLabel(dispatch, label?.id ?? '', patch);
+  const inputStyle = [
+    styles.input,
+    { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement, fontFamily: Fonts.sans },
+  ];
 
   return (
     <View style={styles.panel}>
-      <ThemedText type="smallBold">ラベル</ThemedText>
       <View style={styles.wrap}>
         {doc.labels.map((l, i) => (
           <Chip
@@ -126,19 +174,17 @@ export function LabelPanel({
             onPress={() => dispatch({ type: 'select', id: l.id })}
           />
         ))}
-        <Chip
-          label="＋ ラベルを追加"
-          selected={false}
+        <IconButton
+          icon="plus"
+          variant="outline"
+          size={44}
+          accessibilityLabel="ラベルを追加"
           onPress={() => dispatch({ type: 'addLabel', input: { id: newLabelId(), brand: 'BRAND', name: '商品名', price: '' } })}
         />
       </View>
 
       {!label || !style ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {doc.labels.length === 0
-            ? '「＋ ラベルを追加」でブランド名・商品名・価格を入れられます。ラベルは写真上でドラッグして動かせます。'
-            : '編集するラベルを選んでください。写真上のラベルをタップしても選べます。'}
-        </ThemedText>
+        <NoLabelHint doc={doc} />
       ) : (
         <>
           <TextInput
@@ -169,48 +215,43 @@ export function LabelPanel({
             style={inputStyle}
           />
 
+          <View style={styles.wrap}>
+            <Chip
+              label="ブランド"
+              accessibilityLabel="ブランド名を表示"
+              selected={label.show.brand}
+              onPress={() => commit({ show: { brand: !label.show.brand } })}
+            />
+            <Chip
+              label="商品名"
+              accessibilityLabel="商品名を表示"
+              selected={label.show.name}
+              onPress={() => commit({ show: { name: !label.show.name } })}
+            />
+            <Chip
+              label="価格"
+              accessibilityLabel="価格を表示"
+              selected={label.show.price}
+              onPress={() => commit({ show: { price: !label.show.price } })}
+            />
+          </View>
           <SwitchRow label="このラベルを表示" value={label.visible} onValueChange={(v) => commit({ visible: v })} />
-          <SwitchRow label="ブランド名を表示" value={label.show.brand} onValueChange={(v) => commit({ show: { brand: v } })} />
-          <SwitchRow label="商品名を表示" value={label.show.name} onValueChange={(v) => commit({ show: { name: v } })} />
-          <SwitchRow label="価格を表示" value={label.show.price} onValueChange={(v) => commit({ show: { price: v } })} />
 
-          <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>
-            文字
-          </ThemedText>
           <View style={styles.wrap}>
             {FONT_KEYS.map((k: FontKey) => (
               <Chip key={k} label={FONT_LABEL_JA[k]} selected={style.fontFamily === k} onPress={() => commit({ style: { fontFamily: k } })} />
             ))}
           </View>
           <Stepper label="文字サイズ" value={style.fontSize} min={8} max={32} step={1} onChange={(v) => commit({ style: { fontSize: v } })} />
-          <Swatches label="文字色" colors={TEXT_COLORS} value={style.textColor} onChange={(c) => commit({ style: { textColor: c } })} />
-          <Swatches label="背景色" colors={BG_COLORS} value={style.backgroundColor} onChange={(c) => commit({ style: { backgroundColor: c } })} />
-          <Stepper
-            label="背景の濃さ"
-            value={style.opacity}
-            min={0}
-            max={1}
-            step={0.1}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(v) => commit({ style: { opacity: v } })}
-          />
 
-          <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>
-            線・矢印
-          </ThemedText>
           <View style={styles.wrap}>
-            {ARROWS.map((a) => (
-              <Chip key={a.value} label={a.label} selected={style.arrow === a.value} onPress={() => commit({ style: { arrow: a.value } })} />
-            ))}
-          </View>
-          <Swatches label="線の色" colors={LINE_COLORS} value={style.lineColor} onChange={(c) => commit({ style: { lineColor: c } })} />
-          <Stepper label="線の太さ" value={style.lineWidth} min={0} max={6} step={0.4} onChange={(v) => commit({ style: { lineWidth: v } })} />
-          <ThemedText type="small" themeColor="textSecondary">
-            青い丸を動かすと、線の指し先(アイテム側)を変えられます。
-          </ThemedText>
-
-          <View style={[styles.wrap, { marginTop: Spacing.three }]}>
-            <Chip label="このラベルを削除" selected={false} onPress={() => dispatch({ type: 'removeLabel', id: label.id })} />
+            <IconButton
+              icon="trash"
+              variant="outline"
+              size={48}
+              accessibilityLabel="このラベルを削除"
+              onPress={() => dispatch({ type: 'removeLabel', id: label.id })}
+            />
           </View>
         </>
       )}
@@ -218,18 +259,64 @@ export function LabelPanel({
   );
 }
 
-function dispatchCommit(
-  dispatch: Dispatcher,
-  id: string,
-  patch: Extract<EditorAction, { type: 'commitLabel' }>['patch'],
-) {
-  if (!id) return;
-  dispatch({ type: 'commitLabel', id, patch });
+/** 色タブ: 文字色・背景色・背景の濃さ。 */
+export function ColorPanel({ doc, selectedId, dispatch }: LabelPanelProps) {
+  const { label, style } = useSelectedLabel(doc, selectedId);
+  if (!label || !style) {
+    return (
+      <View style={styles.panel}>
+        <NoLabelHint doc={doc} />
+      </View>
+    );
+  }
+  const commit = (patch: Parameters<typeof commitLabel>[2]) => commitLabel(dispatch, label.id, patch);
+  return (
+    <View style={styles.panel}>
+      <Swatches label="文字色" colors={TEXT_COLORS} value={style.textColor} onChange={(c) => commit({ style: { textColor: c } })} />
+      <Swatches label="背景色" colors={BG_COLORS} value={style.backgroundColor} onChange={(c) => commit({ style: { backgroundColor: c } })} />
+      <Stepper
+        label="背景の濃さ"
+        value={style.opacity}
+        min={0}
+        max={1}
+        step={0.1}
+        format={(v) => `${Math.round(v * 100)}%`}
+        onChange={(v) => commit({ style: { opacity: v } })}
+      />
+    </View>
+  );
+}
+
+/** 線タブ: 矢印の形・線の色・太さ。 */
+export function LinePanel({ doc, selectedId, dispatch }: LabelPanelProps) {
+  const { label, style } = useSelectedLabel(doc, selectedId);
+  if (!label || !style) {
+    return (
+      <View style={styles.panel}>
+        <NoLabelHint doc={doc} />
+      </View>
+    );
+  }
+  const commit = (patch: Parameters<typeof commitLabel>[2]) => commitLabel(dispatch, label.id, patch);
+  return (
+    <View style={styles.panel}>
+      <View style={styles.wrap}>
+        {ARROWS.map((a) => (
+          <Chip key={a.value} label={a.label} selected={style.arrow === a.value} onPress={() => commit({ style: { arrow: a.value } })} />
+        ))}
+      </View>
+      <Swatches label="線の色" colors={LINE_COLORS} value={style.lineColor} onChange={(c) => commit({ style: { lineColor: c } })} />
+      <Stepper label="線の太さ" value={style.lineWidth} min={0} max={6} step={0.4} onChange={(v) => commit({ style: { lineWidth: v } })} />
+      <ThemedText type="small" themeColor="textSecondary">
+        青い丸を動かすと、線の指し先(アイテム側)を変えられます。
+      </ThemedText>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   panel: { gap: Spacing.three, paddingBottom: Spacing.five },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
   tplCard: { width: 150, padding: Spacing.three, borderRadius: 14, gap: Spacing.one },
   input: {
     minHeight: 46,

@@ -1,26 +1,29 @@
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppButton } from '@/components/app-button';
-import { Screen } from '@/components/screen';
+import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { useAnalysis } from '@/features/analysis/analysis-context';
 import { useEditor } from '@/features/editor/editor-context';
 import { pickPhoto } from '@/features/editor/photo-io';
-import { useTheme } from '@/hooks/use-theme';
 
-const STEPS = [
-  ['01', '写真を選ぶ'],
-  ['02', 'AIがアイテムを検出'],
-  ['03', '結果を確認・修正'],
-  ['04', '編集して書き出し・共有'],
-] as const;
+// 仮の写真(公開前に自前の写真か AI 生成へ差し替える。このファイルを置き換えるだけで済む)。
+const HOME_BG = require('../../assets/images/home-bg.jpg');
+
+const INK = 'rgba(15,14,13,';
+const TOP_FADE = [`${INK}.92)`, `${INK}.5)`, `${INK}0)`] as const;
+const BOTTOM_FADE = [Colors.background, `${INK}.6)`, `${INK}0)`] as const;
+
+const MAIN_SIZE = 56;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { snapshot, dispatch } = useEditor();
   const { dispatch: analysisDispatch } = useAnalysis();
   const [busy, setBusy] = useState(false);
@@ -44,61 +47,71 @@ export default function HomeScreen() {
   };
 
   return (
-    <Screen>
-      <View style={styles.hero}>
-        <ThemedText type="eyebrow" themeColor="textSecondary">
-          Outfit, credited.
-        </ThemedText>
-        <ThemedText type="display">コーデ写真を、{'\n'}1枚選ぶだけ。</ThemedText>
-        <ThemedText themeColor="textSecondary">
-          服・靴・バッグ・アクセサリーのブランド名や価格を添えた、投稿用の1枚に仕上げます。
-        </ThemedText>
+    <View style={styles.root}>
+      <Image source={HOME_BG} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+      <View style={[StyleSheet.absoluteFill, styles.veil]} pointerEvents="none" />
+      <LinearGradient
+        pointerEvents="none"
+        colors={TOP_FADE}
+        locations={[0, 0.38, 0.7]}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={BOTTOM_FADE}
+        locations={[0.04, 0.3, 0.55]}
+        start={{ x: 0.5, y: 1 }}
+        end={{ x: 0.5, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={[styles.top, { paddingTop: insets.top + Spacing.two }]}>
+        <Text style={styles.logo} accessibilityRole="header">
+          Coordinate
+        </Text>
+        <View style={[styles.settings, { top: insets.top }]}>
+          <IconButton
+            icon="settings"
+            accessibilityLabel="設定"
+            tooltipPlacement="below"
+            onPress={() => router.push('/settings')}
+          />
+        </View>
       </View>
 
-      {error ? (
-        <ThemedText type="small" accessibilityRole="alert" style={{ color: '#C0392B' }}>
-          {error}
-        </ThemedText>
-      ) : null}
-
-      <View style={styles.buttons}>
-        <AppButton label={busy ? '読み込み中…' : '写真を選ぶ'} onPress={choose} disabled={busy} />
-        {snapshot ? (
-          <AppButton label="編集を続ける" variant="secondary" onPress={() => router.push('/editor')} />
+      <View style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.five }]}>
+        {error ? (
+          <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
+            {error}
+          </ThemedText>
         ) : null}
-        <AppButton label="設定・プライバシー" variant="secondary" onPress={() => router.push('/settings')} />
+        <View style={styles.actions}>
+          <IconButton icon="plus" variant="main" size={MAIN_SIZE} accessibilityLabel="写真を選ぶ" onPress={choose} disabled={busy} />
+          {snapshot ? (
+            <View style={styles.resume}>
+              <IconButton icon="edit" accessibilityLabel="編集を続ける" onPress={() => router.push('/editor')} />
+            </View>
+          ) : null}
+        </View>
       </View>
-
-      <View style={styles.steps}>
-        <ThemedText type="eyebrow" themeColor="textSecondary">
-          How it works
-        </ThemedText>
-        {STEPS.map(([no, text]) => (
-          <View key={no} style={[styles.step, { borderTopColor: theme.border }]}>
-            <ThemedText type="eyebrow" themeColor="textSecondary" style={styles.stepNo}>
-              {no}
-            </ThemedText>
-            <ThemedText type="small" style={styles.stepText}>
-              {text}
-            </ThemedText>
-          </View>
-        ))}
-      </View>
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { gap: Spacing.three, paddingTop: Spacing.three },
-  buttons: { gap: Spacing.three },
-  steps: { gap: Spacing.two },
-  step: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.three,
-    borderTopWidth: StyleSheet.hairlineWidth * 2,
+  root: { flex: 1, backgroundColor: Colors.background },
+  veil: { backgroundColor: `${INK}.30)` },
+  top: { alignItems: 'center' },
+  logo: {
+    fontFamily: Fonts.latinItalic,
+    fontSize: 30,
+    letterSpacing: 7,
+    color: '#E8DCC0',
+    paddingVertical: Spacing.two,
   },
-  stepNo: { width: 28 },
-  stepText: { flex: 1 },
+  settings: { position: 'absolute', right: Spacing.two },
+  bottom: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', gap: Spacing.three },
+  actions: { alignItems: 'center', justifyContent: 'center' },
+  resume: { position: 'absolute', left: '50%', marginLeft: MAIN_SIZE / 2 + Spacing.three },
+  error: { color: Colors.error, textAlign: 'center', paddingHorizontal: Spacing.four },
 });

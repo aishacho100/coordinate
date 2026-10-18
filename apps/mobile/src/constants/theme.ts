@@ -1,28 +1,24 @@
 import '@/global.css';
 
 /**
- * 配色: 温かみのあるオフホワイトとインク。ファッション誌のような抑えたトーン。
+ * 配色: ダーク固定(ダーク・ギャラリー)。端末のライト/ダーク設定は無視する。
+ * 金(accent)は「いま押すもの」だけに使う。
  */
 export const Colors = {
-  light: {
-    text: '#1B1A19',
-    background: '#FAF8F5',
-    backgroundElement: '#F1EDE7',
-    backgroundSelected: '#E5DFD6',
-    textSecondary: '#7B746B',
-    border: '#DDD6CC',
-  },
-  dark: {
-    text: '#F4F1EC',
-    background: '#121110',
-    backgroundElement: '#1D1C1A',
-    backgroundSelected: '#2B2926',
-    textSecondary: '#A59E94',
-    border: '#34312D',
-  },
+  text: '#F4F1EC',
+  background: '#0F0E0D',
+  backgroundElement: '#1D1B19',
+  backgroundSelected: '#2B2926',
+  textSecondary: '#9B9388',
+  border: '#2B2926',
+  accent: '#C9B38A',
+  /** 金の上に載せる文字・アイコンの色。 */
+  onAccent: '#0F0E0D',
+  error: '#D98B7E',
+  success: '#9CBFA5',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor = keyof typeof Colors;
 
 /**
  * フォント(すべて OFL)。

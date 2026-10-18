@@ -1,0 +1,139 @@
+import { View } from 'react-native';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
+
+import { Colors } from '@/constants/theme';
+
+export type IconName =
+  | 'plus'
+  | 'search'
+  | 'edit'
+  | 'trash'
+  | 'text'
+  | 'contrast'
+  | 'frame'
+  | 'share'
+  | 'arrowRight'
+  | 'check'
+  | 'similar'
+  | 'settings'
+  | 'close'
+  | 'back'
+  | 'crop'
+  | 'undo'
+  | 'redo'
+  | 'pointer'
+  | 'yen'
+  | 'rotate'
+  | 'reset'
+  | 'download'
+  | 'chevronDown'
+  | 'chevronUp';
+
+type Props = {
+  name: IconName;
+  size?: number;
+  color?: string;
+  /** 線幅(viewBox 24 基準)。既定は極細の 1.2。 */
+  strokeWidth?: number;
+};
+
+/**
+ * 極細の線アイコン。装飾なので読み上げからは外す(名前は親のボタンが持つ)。
+ * 読み上げ除外は View の aria-hidden で行う。Svg に importantForAccessibility などを直接渡すと、
+ * Web で DOM に漏れて「React does not recognize the `importantForAccessibility` prop」の警告が出る。
+ */
+export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.2 }: Props) {
+  return (
+    <View aria-hidden style={{ width: size, height: size }}>
+      <Svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round">
+        {shape(name)}
+      </Svg>
+    </View>
+  );
+}
+
+function shape(name: IconName) {
+  switch (name) {
+    case 'plus':
+      return <Path d="M12 5v14M5 12h14" />;
+    case 'search':
+      return (
+        <>
+          <Circle cx={11} cy={11} r={6.5} />
+          <Path d="M16 16l4.5 4.5" />
+        </>
+      );
+    case 'edit':
+      return (
+        <>
+          <Path d="M4 20l1-4L16.5 4.5a1.8 1.8 0 012.5 0l.5.5a1.8 1.8 0 010 2.5L8 19z" />
+          <Path d="M14.5 6.5l3 3" />
+        </>
+      );
+    case 'trash':
+      return <Path d="M4.5 7h15M10 4h4M6.5 7l.8 12a1 1 0 001 .9h7.4a1 1 0 001-.9l.8-12M10 11v5M14 11v5" />;
+    case 'text':
+      return <Path d="M5 6.5V5h14v1.5M12 5v14M9.5 19h5" />;
+    case 'contrast':
+      return (
+        <>
+          <Circle cx={12} cy={12} r={8} />
+          <Path d="M12 4a8 8 0 010 16z" />
+        </>
+      );
+    case 'frame':
+      return (
+        <>
+          <Rect x={5} y={5} width={14} height={14} rx={2.5} />
+          <Path d="M9 9h6v6H9z" />
+        </>
+      );
+    case 'share':
+      return <Path d="M12 15V4M8 7.5L12 3.5l4 4M6 11H5.5A1.5 1.5 0 004 12.5v6A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5v-6a1.5 1.5 0 00-1.5-1.5H18" />;
+    case 'arrowRight':
+      return <Path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />;
+    case 'check':
+      return <Path d="M5 12.5l4.5 4.5L19 7.5" />;
+    case 'similar':
+      return <Path d="M4.5 9.5c2-2.5 3.5-2.5 5.5 0s3.5 2.5 5.5 0 2.5-2 4-.5M4.5 16c2-2.5 3.5-2.5 5.5 0s3.5 2.5 5.5 0 2.5-2 4-.5" />;
+    case 'settings':
+      return <Path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5" />;
+    case 'close':
+      return <Path d="M6 6l12 12M18 6L6 18" />;
+    case 'back':
+      return <Path d="M19 12H5M10.5 6.5L5 12l5.5 5.5" />;
+    case 'crop':
+      return <Path d="M7 3v14h14M3 7h14v14" />;
+    case 'undo':
+      return <Path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" />;
+    case 'redo':
+      return <Path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3" />;
+    case 'pointer':
+      return (
+        <>
+          <Circle cx={6} cy={18} r={2.5} />
+          <Path d="M8 16L19 5M13 5h6v6" />
+        </>
+      );
+    case 'yen':
+      return <Path d="M7 4l5 8 5-8M12 12v8M8 14.5h8M8 17.5h8" />;
+    case 'rotate':
+      return <Path d="M19.5 12a7.5 7.5 0 11-2.2-5.3M19.5 4.5v4h-4" />;
+    case 'reset':
+      return <Path d="M4.5 12a7.5 7.5 0 112.2 5.3M4.5 19.5v-4h4" />;
+    case 'download':
+      return <Path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" />;
+    case 'chevronDown':
+      return <Path d="M6 9.5l6 6 6-6" />;
+    case 'chevronUp':
+      return <Path d="M6 14.5l6-6 6 6" />;
+  }
+}

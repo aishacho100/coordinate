@@ -17,6 +17,10 @@ export const ERROR_MESSAGES: Record<AnalyzeErrorKind, string> = {
   analysis_failed: '解析に失敗しました。もう一度お試しください。',
   not_configured: '解析サーバーが未設定です。',
   rate_limited: '短時間にリクエストが集中しています。少し待ってからお試しください。',
+  invalid_request: '送信する内容を作れませんでした。もう一度お試しください。',
+  quota_exceeded: '本日の商品検索の上限に達しました。明日またお試しください。',
+  search_unavailable: '商品検索が現在利用できません。時間をおいてお試しください。',
+  identify_failed: '商品を特定できませんでした。もう一度お試しください。',
   network: '通信できませんでした。ネットワークを確認して、もう一度お試しください。',
 };
 

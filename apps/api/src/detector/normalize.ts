@@ -1,9 +1,11 @@
-import { BoxSchema, DEFAULT_CATEGORIES, type DetectedItem } from '@coordinate/shared';
+import { BoxSchema, DEFAULT_CATEGORIES, ITEM_LIMITS, type DetectedItem } from '@coordinate/shared';
 
 import type { RawItem, RawOutput } from './schema';
 
 const CATEGORY_IDS = new Set(DEFAULT_CATEGORIES.map((c) => c.id));
 const EPS = 1e-6;
+
+const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max) : s);
 
 const unit = (v: number) => Number.isFinite(v) && v >= 0 && v <= 1;
 
@@ -18,18 +20,23 @@ function words(s: string): string {
 }
 
 /**
- * ブランドが、写真内の読み取り文字の中に「語として丸ごと」現れていれば、その文字を返す。
- * 文字の断片(THE → The North Face)や別の単語に埋もれた一致(ON → SEASON)は根拠にしない。
+ * ブランドが、文章の中に「語として丸ごと」現れているかを判定する。
+ * 文字の断片(THE → The North Face)や別の単語に埋もれた一致(ON → SEASON)は一致とみなさない。
  * 空白の有無の違い(NewBalance ↔ New Balance)は同じとみなす。
  */
-function findEvidence(brand: string, visibleText: string[]): string | null {
+export function containsWholeWords(brand: string, text: string): boolean {
   const b = words(brand);
   const bCompact = b.replace(/ /g, '');
-  if (bCompact.length < 2) return null;
+  if (bCompact.length < 2) return false;
+  const w = words(text);
+  if (w === '') return false;
+  return ` ${w} `.includes(` ${b} `) || w.replace(/ /g, '') === bCompact;
+}
+
+/** ブランドが、写真内の読み取り文字の中に語として丸ごと現れていれば、その文字を返す。 */
+function findEvidence(brand: string, visibleText: string[]): string | null {
   for (const t of visibleText) {
-    const w = words(t);
-    if (w === '') continue;
-    if (` ${w} `.includes(` ${b} `) || w.replace(/ /g, '') === bCompact) return t;
+    if (containsWholeWords(brand, t)) return t;
   }
   return null;
 }
@@ -40,9 +47,16 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
   if (r.box.x + r.box.w > 1 + EPS || r.box.y + r.box.h > 1 + EPS) return null;
   if (!unit(r.detection_confidence) || !unit(r.category_confidence)) return null;
 
+  // 共有スキーマの上限に合わせて切り詰める(応答検証で落ちないように)。
+  const visibleText = r.visible_text.slice(0, ITEM_LIMITS.visibleTextCount).map((t) => clip(t, ITEM_LIMITS.visibleTextLength));
+  const colors = r.colors.slice(0, ITEM_LIMITS.colorsCount).map((c) => clip(c, ITEM_LIMITS.colorLength));
+
   const brandText = r.brand?.trim() ?? '';
-  // 信頼度が範囲外のブランドは採用しない(項目自体は残す)。
-  const evidence = brandText && unit(r.brand_confidence) ? findEvidence(brandText, r.visible_text) : null;
+  // 信頼度が範囲外・長すぎるブランドは採用しない(項目自体は残す)。
+  const evidence =
+    brandText && brandText.length <= ITEM_LIMITS.brandName && unit(r.brand_confidence)
+      ? findEvidence(brandText, visibleText)
+      : null;
   const brandScore = r.brand_confidence;
   const hasBrand = evidence !== null;
 
@@ -56,9 +70,9 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
       h: Math.min(r.box.h, 1 - r.box.y),
     },
     appearance: {
-      colors: r.colors,
-      visibleText: r.visible_text,
-      ...(r.notes ? { notes: r.notes } : {}),
+      colors,
+      visibleText,
+      ...(r.notes ? { notes: clip(r.notes, ITEM_LIMITS.freeText) } : {}),
     },
     brandCandidates: hasBrand ? [{ name: brandText, score: brandScore }] : [],
     candidates: [],
@@ -76,7 +90,7 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
     rationale: hasBrand
       ? `写真内の文字「${evidence}」からブランド名を読み取りました`
       : 'ブランドを示す文字・ロゴが確認できませんでした',
-    modelVersion: model,
+    modelVersion: clip(model, ITEM_LIMITS.id),
   };
 }
 

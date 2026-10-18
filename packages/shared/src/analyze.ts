@@ -34,6 +34,10 @@ export const ApiErrorCodeSchema = z.enum([
   'analysis_failed',
   'not_configured',
   'rate_limited',
+  'invalid_request',
+  'quota_exceeded',
+  'search_unavailable',
+  'identify_failed',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 
