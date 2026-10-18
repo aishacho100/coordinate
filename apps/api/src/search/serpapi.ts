@@ -13,7 +13,8 @@ const Row = z.object({
   product_link: z.string().url().optional(),
   source: z.string().optional(),
   extracted_price: z.number().nonnegative().optional(),
-  thumbnail: z.string().optional(),
+  /** SerpApi が配る縮小画像(serpapi.com/images/url/…)。gstatic の thumbnail は使わない。 */
+  serpapi_thumbnail: z.string().optional(),
 });
 const Response = z.object({ shopping_results: z.array(z.unknown()).optional() });
 
@@ -65,20 +66,24 @@ export class SerpApiSearcher implements ProductSearcher {
       api_key: apiKey,
     });
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.deps.timeoutMs);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.deps.timeoutMs);
     let body: unknown;
+    let timedOut = false;
     try {
       const res = await this.deps.fetchImpl(`https://serpapi.com/search.json?${params}`, { signal: controller.signal });
-      if (!res.ok) return { status: 'failed', products: [], calls: 1 };
+      if (!res.ok) return { status: 'failed', products: [], calls: 1, detail: `http_${res.status}` };
       body = await res.json();
     } catch {
-      return { status: 'failed', products: [], calls: 1 };
+      return { status: 'failed', products: [], calls: 1, detail: timedOut ? 'timeout' : 'network' };
     } finally {
       clearTimeout(timer);
     }
 
     const parsed = Response.safeParse(body);
-    if (!parsed.success) return { status: 'failed', products: [], calls: 1 };
+    if (!parsed.success) return { status: 'failed', products: [], calls: 1, detail: 'parse' };
 
     const fetchedAt = now.toISOString();
     const products: Product[] = [];
@@ -91,7 +96,7 @@ export class SerpApiSearcher implements ProductSearcher {
         productId: String(row.product_id ?? row.product_link ?? row.title),
         brand: '',
         name: row.title,
-        ...(row.thumbnail && isAllowedImageUrl(row.thumbnail) ? { imageUrl: row.thumbnail } : {}),
+        ...(row.serpapi_thumbnail && isAllowedImageUrl(row.serpapi_thumbnail) ? { imageUrl: row.serpapi_thumbnail } : {}),
         ...(row.product_link && isHttpsUrl(row.product_link) ? { pageUrl: row.product_link } : {}),
         ...(row.extracted_price !== undefined
           ? { price: { amount: row.extracted_price, currency: 'JPY', kind: 'market' as const, fetchedAt } }

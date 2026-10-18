@@ -57,21 +57,25 @@ export class RakutenSearcher implements ProductSearcher {
     if (rakuten.affiliateId) params.set('affiliateId', rakuten.affiliateId);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.deps.timeoutMs);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.deps.timeoutMs);
     let body: unknown;
+    let timedOut = false;
     try {
       const res = await this.deps.fetchImpl(`${ENDPOINT}?${params}`, { signal: controller.signal });
       store.addMonthly(now, { rakuten: 1 });
-      if (!res.ok) return { status: 'failed', products: [], calls: 1 };
+      if (!res.ok) return { status: 'failed', products: [], calls: 1, detail: `http_${res.status}` };
       body = await res.json();
     } catch {
-      return { status: 'failed', products: [], calls: 0 };
+      return { status: 'failed', products: [], calls: 0, detail: timedOut ? 'timeout' : 'network' };
     } finally {
       clearTimeout(timer);
     }
 
     const parsed = Response.safeParse(body);
-    if (!parsed.success) return { status: 'failed', products: [], calls: 1 };
+    if (!parsed.success) return { status: 'failed', products: [], calls: 1, detail: 'parse' };
 
     const fetchedAt = now.toISOString();
     const products: Product[] = [];

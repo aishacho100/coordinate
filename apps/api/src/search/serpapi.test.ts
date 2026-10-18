@@ -14,6 +14,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   price: '￥16,500',
   extracted_price: 16500,
   thumbnail: 'https://encrypted-tbn0.gstatic.com/shopping?q=tbn:abc',
+  serpapi_thumbnail: 'https://serpapi.com/images/url/abc.webp',
   ...over,
 });
 const okFetch = (rows: unknown[]): FetchLike & { urls: string[] } => {
@@ -26,7 +27,7 @@ const okFetch = (rows: unknown[]): FetchLike & { urls: string[] } => {
 };
 const make = (
   fetchImpl: FetchLike,
-  over: { key?: string | null; limit?: number; onWarn?: (message: string) => void } = {},
+  over: { key?: string | null; limit?: number; timeoutMs?: number; onWarn?: (message: string) => void } = {},
 ) => {
   const store = new FileUsageStore(null);
   const cache = new TtlCache<Product[]>({ ttlMs: 1000, maxEntries: 10, now: () => 0 });
@@ -36,7 +37,7 @@ const make = (
     cache,
     store,
     monthlyLimit: over.limit ?? 200,
-    timeoutMs: 1000,
+    timeoutMs: over.timeoutMs ?? 1000,
     now: () => NOW,
     onWarn: over.onWarn,
   });
@@ -61,7 +62,7 @@ describe('SerpApiSearcher', () => {
       brand: '',
       seller: 'Nike Japan',
       pageUrl: expect.stringContaining('google.com/search'),
-      imageUrl: expect.stringContaining('gstatic.com'),
+      imageUrl: 'https://serpapi.com/images/url/abc.webp',
       price: { amount: 16500, currency: 'JPY', kind: 'market' },
     });
     expect(r.products[0]?.price?.fetchedAt).toBe(NOW.toISOString());
@@ -73,6 +74,18 @@ describe('SerpApiSearcher', () => {
     const r = await s.search('q');
     expect(r.products).toHaveLength(2);
     expect(r.products.every((p) => p.pageUrl === undefined)).toBe(true);
+  });
+
+  it('画像は serpapi_thumbnail のみ使い、無い・許可されないときは imageUrl を付けない(gstatic は使わない)', async () => {
+    const { s } = make(
+      okFetch([
+        row({ serpapi_thumbnail: undefined }),
+        row({ product_id: '2', serpapi_thumbnail: 'https://evil.example.com/images/url/a.webp' }),
+      ]),
+    );
+    const r = await s.search('q');
+    expect(r.products).toHaveLength(2);
+    expect(r.products.every((p) => p.imageUrl === undefined)).toBe(true);
   });
 
   it('価格が取れない行は price を空にする(推測しない)', async () => {
@@ -112,11 +125,20 @@ describe('SerpApiSearcher', () => {
       throw new Error('network');
     };
     const junk: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ shopping_results: 5 }) });
-    for (const f of [bad, boom, junk]) {
+    const expected = ['http_429', 'network', 'parse'];
+    for (const [i, f] of [bad, boom, junk].entries()) {
       const r = await make(f).s.search('q');
       expect(r.status).toBe('failed');
       expect(r.products).toEqual([]);
+      expect(r.detail).toBe(expected[i]);
     }
+  });
+
+  it('タイムアウトは detail が timeout', async () => {
+    const hang: FetchLike = (_u, init) =>
+      new Promise((_r, rej) => init?.signal?.addEventListener('abort', () => rej(new Error('abort'))));
+    const { s } = make(hang, { timeoutMs: 20 });
+    expect((await s.search('q')).detail).toBe('timeout');
   });
 
   it('通信に失敗しても、先に予約した 1 回は戻さず、calls も 1 と数える', async () => {
@@ -125,7 +147,7 @@ describe('SerpApiSearcher', () => {
     };
     const { s, store } = make(boom);
     const r = await s.search('q');
-    expect(r).toEqual({ status: 'failed', products: [], calls: 1 });
+    expect(r).toEqual({ status: 'failed', products: [], calls: 1, detail: 'network' });
     expect(store.monthly(NOW).serpapi).toBe(1);
   });
 

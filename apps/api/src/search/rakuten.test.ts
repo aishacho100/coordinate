@@ -94,9 +94,17 @@ describe('RakutenSearcher', () => {
   it('未設定・失敗・不正な応答・キャッシュ', async () => {
     expect((await make(okFetch([]), null).search('q')).status).toBe('not_configured');
     const f400: FetchLike = async () => ({ ok: false, status: 400, json: async () => ({ errors: {} }) });
-    expect((await make(f400).search('q')).status).toBe('failed');
+    const r400 = await make(f400).search('q');
+    expect(r400.status).toBe('failed');
+    expect(r400.detail).toBe('http_400');
     const junk: FetchLike = async () => ({ ok: true, status: 200, json: async () => ({ Items: 'x' }) });
-    expect((await make(junk).search('q')).status).toBe('failed');
+    const rj = await make(junk).search('q');
+    expect(rj.status).toBe('failed');
+    expect(rj.detail).toBe('parse');
+    const boom: FetchLike = async () => {
+      throw new Error('x');
+    };
+    expect((await make(boom).search('q')).detail).toBe('network');
     const f = okFetch([item()]);
     const s = make(f);
     await s.search('same');

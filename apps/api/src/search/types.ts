@@ -5,6 +5,8 @@ export type SearchOutcome = {
   products: Product[];
   /** 実際に外部へ送った回数(キャッシュの命中は含めない)。 */
   calls: number;
+  /** status が failed のときの理由の種類(http_429・timeout・network・parse)。キー・URL・検索語は含めない。 */
+  detail?: string;
 };
 
 export interface ProductSearcher {
