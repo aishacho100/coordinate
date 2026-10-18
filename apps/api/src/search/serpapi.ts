@@ -49,8 +49,12 @@ export class SerpApiSearcher implements ProductSearcher {
     const hit = cache.get(key);
     if (hit) return { status: 'ok', products: hit, calls: 0 };
 
+    // 上限の確認と同時に 1 回分を予約する(await をはさまないので同時実行でも超えない)。
+    // 通信に失敗しても課金されうるため、予約は戻さない。
     const used = store.monthly(now).serpapi;
     if (used >= monthlyLimit) return { status: 'budget_exhausted', products: [], calls: 0 };
+    store.addMonthly(now, { serpapi: 1 });
+    this.warnIfNearLimit(used + 1);
 
     const params = new URLSearchParams({
       engine: 'google_shopping',
@@ -65,13 +69,10 @@ export class SerpApiSearcher implements ProductSearcher {
     let body: unknown;
     try {
       const res = await this.deps.fetchImpl(`https://serpapi.com/search.json?${params}`, { signal: controller.signal });
-      // 送信した時点で 1 回と数える(失敗しても課金対象になりうるため安全側)。
-      store.addMonthly(now, { serpapi: 1 });
-      this.warnIfNearLimit(used + 1);
       if (!res.ok) return { status: 'failed', products: [], calls: 1 };
       body = await res.json();
     } catch {
-      return { status: 'failed', products: [], calls: 0 };
+      return { status: 'failed', products: [], calls: 1 };
     } finally {
       clearTimeout(timer);
     }

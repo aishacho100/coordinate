@@ -112,6 +112,25 @@ describe('SerpApiSearcher', () => {
     }
   });
 
+  it('通信に失敗しても、先に予約した 1 回は戻さず、calls も 1 と数える', async () => {
+    const boom: FetchLike = async () => {
+      throw new Error('network');
+    };
+    const { s, store } = make(boom);
+    const r = await s.search('q');
+    expect(r).toEqual({ status: 'failed', products: [], calls: 1 });
+    expect(store.monthly(NOW).serpapi).toBe(1);
+  });
+
+  it('上限の確認と同時に予約するので、同時に検索しても上限を超えて送らない', async () => {
+    const f = okFetch([row()]);
+    const { s, store } = make(f, { limit: 1 });
+    const results = await Promise.all([s.search('q1'), s.search('q2'), s.search('q3')]);
+    expect(results.map((r) => r.status).sort()).toEqual(['budget_exhausted', 'budget_exhausted', 'ok']);
+    expect(f.urls).toHaveLength(1);
+    expect(store.monthly(NOW).serpapi).toBe(1);
+  });
+
   it('結果が 0 件(shopping_results が無い応答)でも、失敗ではなく「結果なし」の ok として扱う', async () => {
     const f: FetchLike = async () => ({
       ok: true,
