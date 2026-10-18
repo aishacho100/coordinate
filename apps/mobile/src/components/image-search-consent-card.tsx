@@ -6,7 +6,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export const IMAGE_SEARCH_CONSENT_TEXT =
-  '商品を探すため、切り抜いた画像を外部の画像検索(SerpApi・Google)に送ります。写真全体ではなく、アイテムの部分だけです。当社のサーバーには保存されません。';
+  '商品を探すため、切り抜いた画像を外部の画像検索(SerpApi・Google)に送ります。写真全体ではなく、アイテムの部分だけです。当社のサーバーには保存されません。SerpApi が送った画像を保持する期間は公表されていません。';
 
 type Props = {
   onGrant: () => void;

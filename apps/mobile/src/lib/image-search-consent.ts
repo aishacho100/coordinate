@@ -38,13 +38,18 @@ export async function setImageSearchConsent(value: 'granted' | 'declined'): Prom
   }
 }
 
-/** 同意(または「送らない」の選択)を消し、未設定に戻す。 */
+/**
+ * 同意(または「送らない」の選択)を消し、未設定に戻す。
+ * ファイルを消せなかったときは 'unset' を書き込んで上書きする。それも失敗したら、
+ * 取り消せていないので例外を投げる(呼び出し側がエラーを出す)。
+ */
 export async function clearImageSearchConsent(): Promise<void> {
-  cached = 'unset';
+  const f = file();
   try {
-    const f = file();
     if (f.exists) f.delete();
   } catch {
-    // 消せなかった場合も、この起動中は未設定として扱う。
+    f.create({ overwrite: true });
+    f.write('unset');
   }
+  cached = 'unset';
 }

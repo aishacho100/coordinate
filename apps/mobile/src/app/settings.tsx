@@ -31,16 +31,23 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const [revokeFailed, setRevokeFailed] = useState(false);
+
   const revoke = async () => {
-    await clearImageSearchConsent();
-    setConsent('unset');
+    try {
+      await clearImageSearchConsent();
+      setRevokeFailed(false);
+      setConsent('unset');
+    } catch {
+      setRevokeFailed(true);
+    }
   };
 
   return (
     <Screen>
       <ThemedText type="smallBold">AIサービスへの画像送信について</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        AI解析を実行した場合のみ、写真を当社サーバー経由でAIサービスへ送信します。現在は解析機能が未実装のため、写真は送信されません。
+        解析を実行すると、写真を当社サーバー経由でAIサービスへ送ります。商品を探すときは、切り抜いた画像を外部の画像検索(SerpApi・Google)にも送ります。画像検索への同意は、下から取り消せます。
       </ThemedText>
 
       <View style={[styles.section, { borderColor: theme.border }]}>
@@ -57,6 +64,11 @@ export default function SettingsScreen() {
           <View style={styles.action}>
             <AppButton label="同意を取り消す" variant="secondary" onPress={() => void revoke()} />
           </View>
+        ) : null}
+        {revokeFailed ? (
+          <ThemedText type="small" accessibilityRole="alert">
+            同意を取り消せませんでした。もう一度お試しください。
+          </ThemedText>
         ) : null}
       </View>
 

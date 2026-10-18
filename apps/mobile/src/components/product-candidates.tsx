@@ -32,7 +32,6 @@ const PRICE_LABEL: Record<string, string> = {
 };
 
 /** Lens の販売元がこれより長いときは、リンクに入れず別の行に出す。 */
-const LONG_SELLER_LENGTH = 20;
 
 const RAKUTEN_CREDIT_URL = 'https://developers.rakuten.com';
 
@@ -90,15 +89,24 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
   );
 }
 
+function hostnameOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
 function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
   const theme = useTheme();
   const { product, matched, unconfirmed } = candidate;
   const price = product.price;
   const priceLabel = PRICE_LABEL[product.source];
   const asOf = price ? formatAsOf(price.fetchedAt) : '';
-  // Lens は販売元をリンク文言に使う。長いときは文言を短くし、販売元は別の行に回す。
-  const lensSellerInLink =
-    product.source === 'google_lens' && !!product.seller && product.seller.length <= LONG_SELLER_LENGTH;
+  // Lens の販売元は外部の文字列で遷移先を偽れるため、リンク文言には実際の遷移先のホスト名を使う。
+  const lensHost = product.source === 'google_lens' ? hostnameOf(product.pageUrl) : null;
 
   const linkLabel =
     product.source === 'google_shopping'
@@ -106,8 +114,8 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
       : product.source === 'rakuten'
         ? '楽天市場で見る'
         : product.source === 'google_lens'
-          ? lensSellerInLink
-            ? `${product.seller}で見る`
+          ? lensHost
+            ? `${lensHost}で見る`
             : '商品ページを見る'
           : null;
 
@@ -144,7 +152,7 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
             価格は取得できませんでした
           </ThemedText>
         )}
-        {product.seller && !lensSellerInLink ? (
+        {product.seller ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="tail">
             {product.seller}
           </ThemedText>

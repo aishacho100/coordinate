@@ -132,20 +132,15 @@ describe('ProductCandidates', () => {
     expect(seller.props.ellipsizeMode).toBe('tail');
   });
 
-  it('Lens の販売元が 20 文字を超えるときは「商品ページを見る」にして、販売元は別の行に出す', () => {
+  it('Lens の販売元は長くてもリンク文言に使わず、別の行(1 行・省略)に出す', () => {
     const longSeller = 'あ'.repeat(21);
     const lens: IdentifyCandidate = {
       ...google,
-      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: longSeller },
+      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: longSeller, pageUrl: 'https://shop.example.com/p/1' },
     };
-    const exactly20: IdentifyCandidate = {
-      ...lens,
-      product: { ...lens.product, productId: 'l2', seller: 'い'.repeat(20) },
-    };
-    render(<ProductCandidates response={response({ candidates: [lens, exactly20] })} />);
-    expect(screen.getByRole('link', { name: '商品ページを見る' })).toBeTruthy();
+    render(<ProductCandidates response={response({ candidates: [lens] })} />);
+    expect(screen.getByRole('link', { name: 'shop.example.comで見る' })).toBeTruthy();
     expect(screen.getByText(longSeller).props.numberOfLines).toBe(1);
-    expect(screen.getByRole('link', { name: `${'い'.repeat(20)}で見る` })).toBeTruthy();
   });
 
   it('商品名は 2 行までで省略する', () => {
@@ -160,18 +155,24 @@ describe('ProductCandidates', () => {
     expect(screen.queryByText(/表示価格 ・/)).toBeNull();
   });
 
-  it('Google Lens の候補は「{販売元}で見る」、販売元が無ければ「商品ページを見る」', () => {
+  it('Google Lens の候補は「{リンク先のホスト名}で見る」。販売元を名乗っても遷移先は偽れない', () => {
     const lens: IdentifyCandidate = {
       ...google,
-      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: 'ZOZOTOWN' },
+      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: 'ZOZOTOWN', pageUrl: 'https://www.evil.example/x?y=1' },
     };
-    const lensNoSeller: IdentifyCandidate = {
-      ...lens,
-      product: { ...lens.product, productId: 'l2', seller: undefined },
-    };
-    render(<ProductCandidates response={response({ candidates: [lens, lensNoSeller] })} />);
-    fireEvent.press(screen.getByRole('link', { name: 'ZOZOTOWNで見る' }));
+    render(<ProductCandidates response={response({ candidates: [lens] })} />);
+    expect(screen.queryByRole('link', { name: 'ZOZOTOWNで見る' })).toBeNull();
+    fireEvent.press(screen.getByRole('link', { name: 'evil.exampleで見る' }));
     expect(openURL).toHaveBeenCalledWith(lens.product.pageUrl);
+    expect(screen.getByText('ZOZOTOWN')).toBeTruthy();
+  });
+
+  it('Lens のリンク先が URL として読めないときは「商品ページを見る」', () => {
+    const lens: IdentifyCandidate = {
+      ...google,
+      product: { ...google.product, source: 'google_lens', productId: 'l1', pageUrl: 'not a url' },
+    };
+    render(<ProductCandidates response={response({ candidates: [lens] })} />);
     expect(screen.getByRole('link', { name: '商品ページを見る' })).toBeTruthy();
   });
 

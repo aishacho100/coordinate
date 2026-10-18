@@ -85,11 +85,21 @@ describe('image-search-consent', () => {
     expect(await m.getImageSearchConsent()).toBe('granted');
   });
 
-  it('削除に失敗しても、その起動中は unset として扱う', async () => {
+  it('削除に失敗したら unset を書き込み、読み込み直しても granted に戻らない', async () => {
     const m = load();
     await m.setImageSearchConsent('granted');
     mockFailDelete = true;
     await expect(m.clearImageSearchConsent()).resolves.toBeUndefined();
     expect(await m.getImageSearchConsent()).toBe('unset');
+    expect(await load().getImageSearchConsent()).toBe('unset');
+  });
+
+  it('削除も unset の書き込みも失敗したら例外を投げ、granted のままだと分かる', async () => {
+    const m = load();
+    await m.setImageSearchConsent('granted');
+    mockFailDelete = true;
+    mockFailWrite = true;
+    await expect(m.clearImageSearchConsent()).rejects.toThrow();
+    expect(await m.getImageSearchConsent()).toBe('granted');
   });
 });

@@ -55,12 +55,14 @@ jest.mock('@/lib/identify-api', () => ({
 }));
 
 let mockConsent: 'granted' | 'declined' | 'unset' = 'declined';
+let mockClearFails = false;
 jest.mock('@/lib/image-search-consent', () => ({
   getImageSearchConsent: async () => mockConsent,
   setImageSearchConsent: async (v: 'granted' | 'declined') => {
     mockConsent = v;
   },
   clearImageSearchConsent: async () => {
+    if (mockClearFails) throw new Error('clear');
     mockConsent = 'unset';
   },
 }));
@@ -371,6 +373,7 @@ describe('認識結果画面', () => {
         fireEvent.press(screen.getByLabelText('Tシャツの商品を探す'));
         expect(await screen.findByText(/切り抜いた画像を外部の画像検索\(SerpApi・Google\)に送ります/)).toBeTruthy();
         expect(screen.getByLabelText('同意して探す')).toBeTruthy();
+        expect(screen.getByText(/SerpApi が送った画像を保持する期間は公表されていません。/)).toBeTruthy();
         expect(screen.getByLabelText('画像を送らずに探す')).toBeTruthy();
         expect(screen.queryByLabelText('Tシャツの商品を探す')).toBeNull();
         expect(screen.getByLabelText('帽子の商品を探す')).toBeTruthy();
@@ -589,8 +592,21 @@ describe('設定', () => {
     expect(screen.queryByLabelText('同意を取り消す')).toBeNull();
   });
 
-  it('AIサービスへの画像送信の説明がある', () => {
+  it('取り消しに失敗したらエラーを出し、状態は同意済みのまま', async () => {
+    mockConsent = 'granted';
+    mockClearFails = true;
+    render(<SettingsScreen />);
+    await screen.findByText('現在の状態: 同意済み');
+    fireEvent.press(screen.getByLabelText('同意を取り消す'));
+    expect(await screen.findByText('同意を取り消せませんでした。もう一度お試しください。')).toBeTruthy();
+    expect(screen.getByText('現在の状態: 同意済み')).toBeTruthy();
+    mockClearFails = false;
+  });
+
+  it('AIサービスへの画像送信の説明がある。古い「未実装」の文は出さない', () => {
     render(<SettingsScreen />);
     expect(screen.getByText('AIサービスへの画像送信について')).toBeTruthy();
+    expect(screen.queryByText(/写真は送信されません/)).toBeNull();
+    expect(screen.getByText(/切り抜いた画像を外部の画像検索\(SerpApi・Google\)にも送ります/)).toBeTruthy();
   });
 });
