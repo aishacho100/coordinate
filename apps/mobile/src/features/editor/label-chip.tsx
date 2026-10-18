@@ -1,4 +1,4 @@
-import { resolveLabelStyle, visibleLines, type TemplateDefinition } from '@coordinate/layout';
+import { LABEL_NAME_MAX_LINES, labelMaxWidth, resolveLabelStyle, visibleLines, type TemplateDefinition } from '@coordinate/layout';
 import type { Label } from '@coordinate/shared';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
@@ -40,10 +40,13 @@ export function LabelChip({ label, template, showPrices, unit, selected = false,
           borderWidth: box.borderWidth * unit,
           borderColor: box.borderColor,
         },
+        { maxWidth: labelMaxWidth(unit * 360) },
         selected && styles.selected,
       ]}>
       {lines.brand ? (
         <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[
             { fontFamily, color: s.textColor, fontSize: s.fontSize * unit * 0.85, letterSpacing: 1.2 * unit },
             shadow,
@@ -52,10 +55,17 @@ export function LabelChip({ label, template, showPrices, unit, selected = false,
         </Text>
       ) : null}
       {lines.name ? (
-        <Text style={[{ fontFamily, color: s.textColor, fontSize: s.fontSize * unit }, shadow]}>{lines.name}</Text>
+        <Text
+          numberOfLines={LABEL_NAME_MAX_LINES}
+          ellipsizeMode="tail"
+          style={[{ fontFamily, color: s.textColor, fontSize: s.fontSize * unit }, shadow]}>
+          {lines.name}
+        </Text>
       ) : null}
       {lines.price ? (
         <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={[
             {
               fontFamily,
@@ -73,6 +83,6 @@ export function LabelChip({ label, template, showPrices, unit, selected = false,
 }
 
 const styles = StyleSheet.create({
-  box: { alignSelf: 'flex-start', maxWidth: 220, gap: 0 },
+  box: { alignSelf: 'flex-start', gap: 0 },
   selected: { outlineColor: '#3D8BFF', outlineWidth: 2, outlineStyle: 'solid' },
 });
