@@ -40,6 +40,19 @@ describe('shortProductName', () => {
     expect(long.endsWith('…')).toBe(true);
   });
 
+  it('ブランドの読み(括弧内のカタカナ)を除く', () => {
+    expect(shortProductName('NIKE（ナイキ）CJ4864-657 フレンチテリー プルオーバー パーカー', 'NIKE')).toBe(
+      'フレンチテリー プルオー… CJ4864-657',
+    );
+    expect(shortProductName('NIKE(ナイキ) フレンチテリー パーカー', 'NIKE')).toBe('フレンチテリー パーカー');
+    expect(shortProductName('adidas（アディダス） サンバ OG', 'adidas')).toBe('サンバ OG');
+    expect(shortProductName('(ナイキ) フレンチテリー', 'NIKE')).toBe('フレンチテリー');
+  });
+
+  it('括弧内がカタカナ以外を含むものは残す', () => {
+    expect(shortProductName('サンバ OG (Black)', '')).toBe('サンバ OG (Black)');
+  });
+
   it('結果が空なら fallback を返す', () => {
     expect(shortProductName('【楽天市場】送料無料', 'NIKE', 'スニーカー')).toBe('スニーカー');
     expect(shortProductName('', '')).toBe('');

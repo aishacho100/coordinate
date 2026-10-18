@@ -17,6 +17,8 @@ const NOISE = [
 /** 英数字とハイフンの並びで、数字を含むものを型番とみなす(例 CJ4864-657)。 */
 const MODEL_NUMBER = /(?<![A-Za-z0-9-])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]+)+(?![A-Za-z0-9-])/;
 
+const KATAKANA_READING = /\([\s゠-ヿ]+\)/g;
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const tidy = (s: string) => s.replace(/[★☆♪※]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -34,6 +36,8 @@ export function shortProductName(name: string, brand: string, fallback = ''): st
     if (next === text) break;
     text = next;
   }
+  // ブランドの読み(括弧内がカタカナ・長音のみ。全角括弧は NFKC で半角になっている)。
+  text = text.replace(KATAKANA_READING, ' ');
   for (const re of NOISE) text = text.replace(re, ' ');
 
   const model = MODEL_NUMBER.exec(text)?.[0] ?? '';
