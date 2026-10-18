@@ -60,6 +60,12 @@ describe('Comparer', () => {
     // 画像 URL はあるが Claude は見ていないため、同一とは扱わない。
     expect(out.judgements[0]?.sameProduct).toBe(false);
   });
+  it('Claude に渡す画像 URL は、検証済みの正規化した URL(new URL(raw).href)にする', async () => {
+    const c = client(reply({ results: [row(0)] }));
+    await new Comparer(c, 'm', 'low').compare(img, [p('a', 'https://THUMBNAIL.image.rakuten.co.jp/a b.jpg')]);
+    const urls = c.calls[0].messages[0].content.filter((b: any) => b.type === 'image' && b.source.type === 'url').map((b: any) => b.source.url);
+    expect(urls).toEqual(['https://thumbnail.image.rakuten.co.jp/a%20b.jpg']);
+  });
   it('範囲外の index と不正な値を捨てる', async () => {
     const c = client(reply({ results: [row(5), row(0, { similarity: 7 }), row(0)] }));
     const out = await new Comparer(c, 'm', 'low').compare(img, [p('a')]);

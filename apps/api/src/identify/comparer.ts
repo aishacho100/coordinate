@@ -86,7 +86,8 @@ export class Comparer {
       content.push({ type: 'text', text: lines.filter(Boolean).join('\n') });
       if (c.imageUrl && isAllowedImageUrl(c.imageUrl)) {
         shown.add(i);
-        content.push({ type: 'image', source: { type: 'url', url: c.imageUrl } });
+        // 検証した URL をそのまま渡す(正規化済みの href)。
+        content.push({ type: 'image', source: { type: 'url', url: new URL(c.imageUrl).href } });
       } else {
         content.push({ type: 'text', text: '(no image for this candidate)' });
       }

@@ -8,5 +8,7 @@ export function isAllowedImageUrl(raw: string): boolean {
   } catch {
     return false;
   }
+  // ポート・ユーザー情報つきの URL は拒否する。
+  if (u.port !== '' || u.username !== '' || u.password !== '') return false;
   return u.protocol === 'https:' && HOSTS.some((re) => re.test(u.hostname));
 }

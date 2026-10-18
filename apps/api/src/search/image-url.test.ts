@@ -12,4 +12,11 @@ describe('isAllowedImageUrl', () => {
     expect(isAllowedImageUrl('https://127.0.0.1/x')).toBe(false);
     expect(isAllowedImageUrl('not a url')).toBe(false);
   });
+  it('ポート指定・ユーザー情報つきの URL は拒否する', () => {
+    expect(isAllowedImageUrl('https://thumbnail.image.rakuten.co.jp:8443/a.jpg')).toBe(false);
+    expect(isAllowedImageUrl('https://user@thumbnail.image.rakuten.co.jp/a.jpg')).toBe(false);
+    expect(isAllowedImageUrl('https://user:pass@thumbnail.image.rakuten.co.jp/a.jpg')).toBe(false);
+    expect(isAllowedImageUrl('https://:pass@thumbnail.image.rakuten.co.jp/a.jpg')).toBe(false);
+    expect(isAllowedImageUrl('https://thumbnail.image.rakuten.co.jp:443/a.jpg')).toBe(true);
+  });
 });
