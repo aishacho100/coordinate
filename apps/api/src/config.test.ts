@@ -87,4 +87,9 @@ describe('loadConfig: 商品検索', () => {
     expect(c.limits.identifyPerInstallPerDay).toBe(30);
     expect(c.limits.identifyPerIpPerDay).toBe(90);
   });
+  it('検索キャッシュの保持時間は最大 3600 秒に収める(楽天の規約: メモリ上の短時間のみ)', () => {
+    expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '86400' }).limits.cacheTtlMs).toBe(3_600_000);
+    expect(loadConfig({ SEARCH_CACHE_TTL_SECONDS: '3600' }).limits.cacheTtlMs).toBe(3_600_000);
+    expect(loadConfig({}).limits.cacheTtlMs).toBe(3_600_000);
+  });
 });

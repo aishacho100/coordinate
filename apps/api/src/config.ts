@@ -36,6 +36,8 @@ function positiveNumber(v: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+const MAX_CACHE_TTL_SECONDS = 3600;
+
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const key = env.ANTHROPIC_API_KEY?.trim();
   const effort = EFFORTS.find((e) => e === env.ANTHROPIC_EFFORT) ?? 'medium';
@@ -60,7 +62,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         : null,
     limits: {
       searchesPerProviderPerItem: 2,
-      cacheTtlMs: (positiveNumber(env.SEARCH_CACHE_TTL_SECONDS) ?? 3600) * 1000,
+      // 楽天の規約により、メモリ上の短時間(最大 1 時間)に限る。
+      cacheTtlMs: Math.min(positiveNumber(env.SEARCH_CACHE_TTL_SECONDS) ?? MAX_CACHE_TTL_SECONDS, MAX_CACHE_TTL_SECONDS) * 1000,
       identifyPerInstallPerDay: perInstall,
       identifyPerIpPerDay: perInstall * 3,
       serpapiMonthly: positiveNumber(env.SERPAPI_MONTHLY_LIMIT) ?? 200,
