@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AnalyzingScreen from '@/app/analyzing';
@@ -186,6 +186,23 @@ describe('認識結果画面', () => {
     expect(screen.getByText('ブランド不明')).toBeTruthy();
     expect(screen.getByLabelText('スニーカーを選ぶ').props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.queryByText(/¥|円/)).toBeNull(); // Phase 3 では価格を出さない
+  });
+
+  it('写真は画面高の約 4 割までに収め、アスペクトを保ち、点は写真の表示サイズの割合で置く', () => {
+    const spy = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 411, height: 914, scale: 2.625, fontScale: 1 });
+    try {
+      renderResult(doneState());
+      const style = StyleSheet.flatten(screen.getByTestId('result-photo').props.style);
+      expect(style.height).toBeLessThanOrEqual(914 * 0.45);
+      expect(style.width / style.height).toBeCloseTo(3000 / 4000);
+      expect(style.width).toBeLessThanOrEqual(411);
+      // アイテム a(中心 0.35, 0.35)の点は、写真の枠の 35% の位置。
+      const tree = JSON.stringify(screen.toJSON());
+      expect(tree).toContain('"left":"35%"');
+      expect(tree).toContain('"top":"35%"');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('品質の助言を表示する', () => {

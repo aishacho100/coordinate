@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useNavigation, useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { Chip } from '@/components/controls';
@@ -12,11 +12,12 @@ import { ImageSearchConsentCard } from '@/components/image-search-consent-card';
 import { ProductCandidates } from '@/components/product-candidates';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Colors, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { newItemId, useAnalysis } from '@/features/analysis/analysis-context';
 import type { ResultItem } from '@/features/analysis/analysis-reducer';
 import { cropItem } from '@/features/analysis/crop-item';
 import { itemsToLabelInputs } from '@/features/analysis/items-to-labels';
+import { fitPhoto, PHOTO_MAX_HEIGHT_RATIO } from '@/features/analysis/photo-fit';
 import { thumbLayout } from '@/features/analysis/thumb-layout';
 import { newLabelId, useEditor } from '@/features/editor/editor-context';
 import { currentCrop } from '@/features/editor/reducer';
@@ -48,6 +49,7 @@ export default function ResultScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const theme = useTheme();
+  const window = useWindowDimensions();
   const { snapshot, dispatch: editorDispatch } = useEditor();
   const { state, dispatch } = useAnalysis();
   // 開いているカテゴリ選択。'new' は手動追加、'edit' は選択中アイテムの編集パネル。
@@ -134,9 +136,16 @@ export default function ResultScreen() {
     router.push('/editor');
   };
 
+  // 写真は高さに上限を設け(画面の約 42%)、アスペクトを保って収める。点・タグは割合で置くので表示サイズに追従する。
+  const photoSize = fitPhoto(
+    photo,
+    Math.min(window.width, MaxContentWidth) - Spacing.four * 2,
+    window.height * PHOTO_MAX_HEIGHT_RATIO,
+  );
+
   return (
     <Screen>
-      <View style={[styles.photoWrap, { aspectRatio: photo.width / photo.height, borderColor: theme.border }]}>
+      <View testID="result-photo" style={[styles.photoWrap, photoSize, { borderColor: theme.border }]}>
         <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
         {state.items.map((it) => (
           <ItemMarker key={it.id} item={it} active={it.id === selected?.id} />
@@ -429,7 +438,7 @@ function CategoryPicker({ current, onPick }: { current?: string; onPick: (catego
 }
 
 const styles = StyleSheet.create({
-  photoWrap: { width: '100%', borderRadius: 14, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth * 2 },
+  photoWrap: { alignSelf: 'center', borderRadius: 14, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth * 2 },
   marker: { position: 'absolute', width: 0, height: 0 },
   dot: {
     position: 'absolute',
