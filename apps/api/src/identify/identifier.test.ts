@@ -141,4 +141,36 @@ describe('Identifier', () => {
     const r = await make({ serpapi: searcher([ok([])]), rakuten: searcher([ok([dup, dup])]) }).identify(img, sampleItem);
     expect(r.candidates).toHaveLength(1);
   });
+  describe('ブランドの再検証(クライアントの申告を信用しない)', () => {
+    const allMatchComparer = {
+      compare: async (_i: unknown, cands: Product[]) => ({
+        judgements: cands.map((_, index) => ({ index, sameProduct: true, nameMatchesFeatures: true, similarity: 0.95, matched: ['ロゴ'], unconfirmed: [] })),
+        usage: usage(900, 100),
+      }),
+    };
+    const nike = (over: Partial<DetectedItem['appearance']>): DetectedItem => ({
+      ...sampleItem,
+      appearance: { ...sampleItem.appearance, ...over },
+      brandCandidates: [{ name: 'Nike', score: 0.9 }],
+    });
+    const run = (item: DetectedItem) =>
+      make({ comparer: allMatchComparer, serpapi: searcher([ok([])]), rakuten: searcher([ok([product('NIKE エアフォース1')])]) }).identify(img, item);
+
+    it('visibleText が空でブランド候補だけある item は、他の条件がそろっても A にならず、level も low', async () => {
+      const r = await run(nike({ visibleText: [] }));
+      expect(r.verdict).toBe('candidates');
+      expect(r.level).toBe('low');
+    });
+
+    it('visibleText にブランドが語として読み取れていれば A になる', async () => {
+      const r = await run(nike({ visibleText: ['NIKE'] }));
+      expect(r.verdict).toBe('identified');
+      expect(r.level).toBe('high');
+    });
+
+    it('visibleText に無関係な文字しか無ければ A にならない', async () => {
+      const r = await run(nike({ visibleText: ['SALE'] }));
+      expect(r.verdict).toBe('candidates');
+    });
+  });
 });

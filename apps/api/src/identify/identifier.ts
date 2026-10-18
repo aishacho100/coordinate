@@ -10,6 +10,7 @@ import {
 } from '@coordinate/shared';
 
 import type { Config } from '../config';
+import { containsWholeWords } from '../detector/normalize';
 import type { ProductSearcher } from '../search/types';
 import { estimateCostUsd } from '../usage';
 import type { Comparer } from './comparer';
@@ -67,7 +68,10 @@ export class Identifier {
       merged.push(p);
     }
 
-    const brandRead = item.brandCandidates[0]?.name ?? null;
+    // クライアントの申告を信用せず、ブランドが写真の読み取り文字に語として現れるときだけ採用する。
+    const claimed = item.brandCandidates[0]?.name ?? null;
+    const brandRead =
+      claimed !== null && item.appearance.visibleText.some((t) => containsWholeWords(claimed, t)) ? claimed : null;
     let claude: Usage = gen.usage;
     let comparison: IdentifyResponse['comparison'] = 'skipped';
     let verdict: IdentifyResponse['verdict'];
