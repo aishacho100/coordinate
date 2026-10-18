@@ -148,6 +148,7 @@ async function main() {
 
     for (const item of items) {
       const base = { file: label, item: item.id.slice(0, 12), category: item.categoryId };
+      const failures: string[] = [];
       try {
         const rect = cropRect(item.box, { width: photo.width ?? 0, height: photo.height ?? 0 });
         const crop = await sharp(prepared.data).extract(rect).jpeg({ quality: 90 }).toBuffer();
@@ -157,7 +158,9 @@ async function main() {
         const brandRead =
           claimed !== null && item.appearance.visibleText.some((t) => containsWholeWords(claimed, t));
 
-        const r: IdentifyResponse = await identifier.identify(image, item);
+        const r: IdentifyResponse = await identifier.identify(image, item, {
+          onSearchFailure: (provider, detail) => failures.push(`${provider}:${detail}`),
+        });
         identified += 1;
         verdicts[r.verdict] += 1;
         serpCalls += r.usage.serpapiSearches;
@@ -176,6 +179,7 @@ async function main() {
           top: clip(r.candidates[0]?.product.name ?? '-', 40),
           serpapi: r.searches.serpapi,
           rakuten: r.searches.rakuten,
+          searchFailures: failures.join(', ') || '-',
           comparison: r.comparison,
           usd: r.estimatedCostUsd?.toFixed(4) ?? '-',
         });
@@ -187,6 +191,7 @@ async function main() {
           verdict: r.verdict,
           level: r.level,
           searches: r.searches,
+          searchFailures: failures,
           comparison: r.comparison,
           queries: r.queries,
           usage: r.usage,
@@ -204,7 +209,7 @@ async function main() {
           })),
         });
       } catch (e) {
-        rows.push({ ...base, error: e instanceof Error ? e.name : 'unknown' });
+        rows.push({ ...base, error: e instanceof Error ? e.name : 'unknown', searchFailures: failures.join(', ') || '-' });
       }
     }
   }

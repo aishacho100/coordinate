@@ -84,16 +84,19 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
       return sendError(reply, 400, 'invalid_image');
     }
 
+    // 検索の失敗理由(種類のみ。キー・URL・検索語は含まれない)。
+    const searchFailures: string[] = [];
     let result;
     try {
       // Claude の使用量は、応答を受け取るたびに計上する(後続の処理が失敗しても課金されるため)。
       result = await deps.identifier.identify(image, item, {
+        onSearchFailure: (provider, detail) => searchFailures.push(`${provider}:${detail}`),
         onUsage: (u) =>
           safely('monthly usage failed', () => store.addMonthly(now, { claudeInput: u.inputTokens, claudeOutput: u.outputTokens }), undefined),
       });
     } catch (e) {
       // 画像・キー・検索語・上流の詳細はログに残さない。種類だけ記録する。
-      req.log.error({ errorName: e instanceof Error ? e.name : 'unknown', status: (e as { status?: number }).status }, 'identify failed');
+      req.log.error({ errorName: e instanceof Error ? e.name : 'unknown', status: (e as { status?: number }).status, searchFailures }, 'identify failed');
       return e instanceof SearchUnavailableError
         ? sendError(reply, 503, 'search_unavailable')
         : sendError(reply, 502, 'identify_failed');
@@ -104,6 +107,7 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
         verdict: result.verdict,
         searches: result.searches,
         comparison: result.comparison,
+        searchFailures,
         usage: result.usage,
         estimatedCostUsd: result.estimatedCostUsd,
       },

@@ -190,6 +190,25 @@ describe('Identifier', () => {
       expect(r.verdict).toBe('candidates');
     });
   });
+  describe('onSearchFailure(検索の失敗理由)', () => {
+    it('failed の検索元と detail を通知する(失敗以外は通知しない)', async () => {
+      const seen: string[] = [];
+      const serp = searcher([{ status: 'failed', products: [], calls: 1, detail: 'http_429' }]);
+      await make({ serpapi: serp }).identify(img, sampleItem, {
+        onSearchFailure: (provider, detail) => seen.push(`${provider}:${detail}`),
+      });
+      expect(seen).toEqual(['serpapi:http_429']);
+    });
+    it('detail が無い失敗は unknown、通知側の例外は結果を妨げない', async () => {
+      const rak = searcher([{ status: 'failed', products: [], calls: 1 }]);
+      const r = await make({ rakuten: rak }).identify(img, sampleItem, {
+        onSearchFailure: () => {
+          throw new Error('x');
+        },
+      });
+      expect(r.searches.rakuten).toBe('failed');
+    });
+  });
   describe('onUsage(失敗した処理の使用量も計上する)', () => {
     it('検索が両方失敗して 503 相当になっても、検索語生成のトークンを通知する', async () => {
       const dead = searcher([{ status: 'failed', products: [], calls: 1 }]);

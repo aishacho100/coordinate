@@ -52,7 +52,11 @@ export class Identifier {
   async identify(
     image: DetectorImage,
     item: DetectedItem,
-    opts: { onUsage?: (usage: Usage) => void } = {},
+    opts: {
+      onUsage?: (usage: Usage) => void;
+      /** 検索が失敗したとき、検索元と理由の種類(http_429 など)を通知する。キー・URL・検索語は含まれない。 */
+      onSearchFailure?: (provider: 'serpapi' | 'rakuten', detail: string) => void;
+    } = {},
   ): Promise<IdentifyResponse> {
     const t0 = performance.now();
     const now = (this.deps.now ?? (() => new Date()))();
@@ -61,6 +65,13 @@ export class Identifier {
         opts.onUsage?.(u);
       } catch {
         // 計上側の失敗で結果を妨げない。
+      }
+    };
+    const failure = (provider: 'serpapi' | 'rakuten', detail: string) => {
+      try {
+        opts.onSearchFailure?.(provider, detail);
+      } catch {
+        // ログ側の失敗で結果を妨げない。
       }
     };
     let gen;
@@ -74,8 +85,8 @@ export class Identifier {
     report(gen.usage);
 
     const [serp, rak] = await Promise.all([
-      this.collect(this.deps.serpapi, gen.queries),
-      this.collect(this.deps.rakuten, gen.queries),
+      this.collect(this.deps.serpapi, gen.queries, (d) => failure('serpapi', d)),
+      this.collect(this.deps.rakuten, gen.queries, (d) => failure('rakuten', d)),
     ]);
     const usable = (s: SearchStatus) => s === 'ok';
     if (!usable(serp.status) && !usable(rak.status)) throw new SearchUnavailableError();
@@ -156,12 +167,17 @@ export class Identifier {
    * 1 つ目の検索語で検索し、候補が少なければ 2 つ目で 1 回だけ追加検索する。
    * 1 つ目が ok なら、2 つ目が失敗しても status は ok のままにする(得られた候補は有効なため)。
    */
-  private async collect(searcher: ProductSearcher, queries: string[]): Promise<Collected> {
+  private async collect(
+    searcher: ProductSearcher,
+    queries: string[],
+    onFailure: (detail: string) => void,
+  ): Promise<Collected> {
     const out: Collected = { products: [], status: 'failed', calls: 0 };
     const max = Math.min(this.deps.maxSearchesPerProvider, queries.length);
     for (let i = 0; i < max; i++) {
       const r = await searcher.search(queries[i]!);
       out.calls += r.calls;
+      if (r.status === 'failed') onFailure(r.detail ?? 'unknown');
       if (r.status !== 'ok') {
         if (i === 0) out.status = r.status;
         break;
