@@ -53,6 +53,23 @@ describe('analysisReducer', () => {
     ]);
     expect(s.quality.issues).toEqual(['blurry']);
     expect(s.applied).toBe(false);
+    expect(s.dirty).toBe(false);
+  });
+
+  it('解析直後は dirty ではなく、編集・追加・削除・商品の検索で dirty になる', () => {
+    const base = done([det('a')]);
+    const dirtyOf = (a: AnalysisAction) => {
+      const s = run([a], base);
+      if (s.status !== 'done') throw new Error();
+      return s.dirty;
+    };
+    expect(dirtyOf({ type: 'applied' })).toBe(false);
+    expect(dirtyOf({ type: 'setCategory', id: 'a', categoryId: 'knit' })).toBe(true);
+    expect(dirtyOf({ type: 'setBrand', id: 'a', brand: 'UNIQLO' })).toBe(true);
+    expect(dirtyOf({ type: 'remove', id: 'a' })).toBe(true);
+    expect(dirtyOf({ type: 'addManual', id: 'm1', categoryId: 'cap' })).toBe(true);
+    expect(dirtyOf({ type: 'identifyStart', id: 'a' })).toBe(true);
+    expect(dirtyOf({ type: 'identifyFailed', id: 'a', kind: 'network' })).toBe(true);
   });
 
   it('カテゴリ変更・ブランド入力・削除ができる', () => {

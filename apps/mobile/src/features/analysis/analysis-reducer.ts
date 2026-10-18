@@ -35,6 +35,8 @@ export type AnalysisState =
       model: string;
       /** 編集画面へラベルを渡し済みか(二重に追加しない)。 */
       applied: boolean;
+      /** 解析直後から変えたか(カテゴリ・ブランド・削除・手動追加・商品を探した結果)。戻る前の確認に使う。 */
+      dirty: boolean;
     };
 
 export const initialAnalysisState: AnalysisState = { status: 'idle' };
@@ -81,6 +83,7 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
         timings: action.response.timings,
         model: action.response.model,
         applied: false,
+        dirty: false,
       };
   }
 
@@ -89,15 +92,17 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
     case 'setCategory':
       return {
         ...state,
+        dirty: true,
         items: state.items.map((i) => (i.id === action.id ? { ...i, categoryId: action.categoryId, identify: { status: 'idle' } } : i)),
       };
     case 'setBrand':
-      return { ...state, items: state.items.map((i) => (i.id === action.id ? { ...i, brand: action.brand } : i)) };
+      return { ...state, dirty: true, items: state.items.map((i) => (i.id === action.id ? { ...i, brand: action.brand } : i)) };
     case 'remove':
-      return { ...state, items: state.items.filter((i) => i.id !== action.id) };
+      return { ...state, dirty: true, items: state.items.filter((i) => i.id !== action.id) };
     case 'addManual':
       return {
         ...state,
+        dirty: true,
         items: [
           ...state.items,
           { id: action.id, categoryId: action.categoryId, brand: '', box: MANUAL_BOX, origin: 'manual', level: 'unidentified', detected: null, identify: { status: 'idle' } },
@@ -115,5 +120,5 @@ export function analysisReducer(state: AnalysisState, action: AnalysisAction): A
 }
 
 function withIdentify(state: Extract<AnalysisState, { status: 'done' }>, id: string, identify: IdentifyState): AnalysisState {
-  return { ...state, items: state.items.map((i) => (i.id === id ? { ...i, identify } : i)) };
+  return { ...state, dirty: true, items: state.items.map((i) => (i.id === id ? { ...i, identify } : i)) };
 }

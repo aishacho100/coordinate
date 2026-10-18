@@ -1,8 +1,9 @@
 import { DEFAULT_CATEGORIES, type QualityIssue } from '@coordinate/shared';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { Chip } from '@/components/controls';
@@ -42,6 +43,7 @@ const indexText = (n: number) => String(n).padStart(2, '0');
 
 export default function ResultScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const theme = useTheme();
   const { snapshot, dispatch: editorDispatch } = useEditor();
   const { state, dispatch } = useAnalysis();
@@ -51,6 +53,16 @@ export default function ResultScreen() {
   const searching = useRef(new Set<string>());
   // 同意のカードを出している項目。同意の値そのものは端末の保存(設定画面と共有)を押すたびに読む。
   const [asking, setAsking] = useState<string[]>([]);
+
+  // 編集した内容や探した結果があるときだけ、戻る操作(戻るキー・スワイプ・ヘッダー)を止めて確認する。
+  // 「この内容で編集へ」は push なのでこの画面は取り除かれず、確認は出ない。
+  const hasEdits = state.status === 'done' && state.dirty;
+  usePreventRemove(hasEdits, ({ data }) => {
+    Alert.alert('編集内容が失われます', '戻ると、この画面での変更と探した商品の結果が失われます。', [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: '戻る', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
 
   if (!snapshot || state.status !== 'done') {
     return (

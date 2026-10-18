@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
+import { Alert } from 'react-native';
 
 import AnalyzingScreen from '@/app/analyzing';
 import EditorScreen from '@/app/editor';
@@ -16,8 +17,19 @@ import type { DetectedItem, IdentifyResponse } from '@coordinate/shared';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockNavDispatch = jest.fn();
+const mockNavigation = { dispatch: (...args: unknown[]) => mockNavDispatch(...args) };
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useNavigation: () => mockNavigation,
+}));
+
+// 戻る操作の阻止は実機の navigator が無いと動かないので、引数(阻止するか・阻止したときの処理)だけ取り出して確かめる。
+let mockPrevent: { prevent: boolean; onPrevented: (o: { data: { action: unknown } }) => void } | null = null;
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: (prevent: boolean, onPrevented: (o: { data: { action: unknown } }) => void) => {
+    mockPrevent = { prevent, onPrevented };
+  },
 }));
 
 const mockPickPhoto = jest.fn();
@@ -133,6 +145,7 @@ describe('認識結果画面', () => {
     timings: { quality: 120, detect: 4200, total: 4400 },
     model: 'claude-sonnet-5-5',
     applied: false,
+    dirty: false,
     ...over,
   });
 
@@ -262,6 +275,7 @@ describe('認識結果画面', () => {
       timings: { quality: 120, detect: 4200, total: 4400 },
       model: 'claude-sonnet-5-5',
       applied: false,
+      dirty: false,
     });
 
     beforeEach(() => {
@@ -423,6 +437,82 @@ describe('認識結果画面', () => {
       await screen.findByText('候補が見つかりました');
       fireEvent.press(screen.getByLabelText('この内容で編集へ'));
       expect(mockPush).toHaveBeenCalledWith('/editor');
+    });
+  });
+
+  describe('戻る操作の確認', () => {
+    const POP = { type: 'POP' };
+    const goBack = () => act(() => mockPrevent!.onPrevented({ data: { action: POP } }));
+
+    beforeEach(() => {
+      mockPrevent = null;
+      mockNavDispatch.mockClear();
+    });
+
+    it('何も編集していなければ、戻る操作を止めない', () => {
+      renderResult(doneState());
+      expect(mockPrevent?.prevent).toBe(false);
+    });
+
+    it.each([
+      ['ブランドの入力', () => fireEvent.changeText(screen.getByLabelText('スニーカーのブランド'), 'adidas')],
+      ['削除', () => fireEvent.press(screen.getByLabelText('Tシャツを削除'))],
+      [
+        'カテゴリの変更',
+        () => {
+          fireEvent.press(screen.getByLabelText('Tシャツのカテゴリを変更'));
+          fireEvent.press(screen.getByLabelText('ニット'));
+        },
+      ],
+      [
+        '手動追加',
+        () => {
+          fireEvent.press(screen.getByLabelText('アイテムを追加'));
+          fireEvent.press(screen.getByLabelText('帽子'));
+        },
+      ],
+    ])('%sのあとは、戻る操作を止める', (_name, edit) => {
+      renderResult(doneState());
+      edit();
+      expect(mockPrevent?.prevent).toBe(true);
+    });
+
+    it('止めたときは確認を出し、キャンセルでは離れない', () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      renderResult(doneState({ dirty: true }));
+      expect(mockPrevent?.prevent).toBe(true);
+      goBack();
+      expect(alert).toHaveBeenCalledWith(
+        '編集内容が失われます',
+        '戻ると、この画面での変更と探した商品の結果が失われます。',
+        expect.any(Array),
+      );
+      const buttons = alert.mock.calls[0]![2]!;
+      expect(buttons.map((b) => [b.text, b.style])).toEqual([
+        ['キャンセル', 'cancel'],
+        ['戻る', 'destructive'],
+      ]);
+      buttons[0]!.onPress?.();
+      expect(mockNavDispatch).not.toHaveBeenCalled();
+      alert.mockRestore();
+    });
+
+    it('「戻る」を選ぶと、止めていた操作をそのまま実行して離れる', () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      renderResult(doneState({ dirty: true }));
+      goBack();
+      alert.mock.calls[0]![2]![1]!.onPress?.();
+      expect(mockNavDispatch).toHaveBeenCalledWith(POP);
+      alert.mockRestore();
+    });
+
+    it('「この内容で編集へ」では確認を出さずに進む', () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      renderResult(doneState({ dirty: true }));
+      fireEvent.press(screen.getByLabelText('この内容で編集へ'));
+      expect(mockPush).toHaveBeenCalledWith('/editor');
+      expect(alert).not.toHaveBeenCalled();
+      alert.mockRestore();
     });
   });
 
