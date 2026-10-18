@@ -9,6 +9,8 @@ import { prepareForModel } from '../image/prepare-image';
 import { FileUsageStore } from '../usage/usage-store';
 import { sendError } from './analyze';
 
+/** item フィールド(JSON 文字列)の最大バイト数。 */
+const ITEM_FIELD_MAX_BYTES = 32 * 1024;
 const INSTALL_ID = /^[A-Za-z0-9-]{16,64}$/;
 
 export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
@@ -19,13 +21,14 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
     let itemRaw: string | undefined;
     try {
       // item(JSON 文字列)1 つとファイル 1 つだけを受け付ける。
-      for await (const part of req.parts({ limits: { fields: 1, files: 1, parts: 2, fileSize: deps.config.maxImageBytes } })) {
+      for await (const part of req.parts({ limits: { fields: 1, files: 1, parts: 2, fileSize: deps.config.maxImageBytes, fieldSize: ITEM_FIELD_MAX_BYTES } })) {
         if (part.type === 'file') {
           if (data) return sendError(reply, 400, 'invalid_image');
           data = await part.toBuffer();
           if (part.file.truncated) return sendError(reply, 400, 'too_large');
         } else {
           if (part.fieldname !== 'item' || itemRaw !== undefined) return sendError(reply, 400, 'invalid_request');
+          if (part.valueTruncated) return sendError(reply, 400, 'invalid_request');
           itemRaw = typeof part.value === 'string' ? part.value : undefined;
         }
       }

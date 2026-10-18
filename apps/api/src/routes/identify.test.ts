@@ -74,6 +74,24 @@ describe('POST /v1/identify', () => {
     expect(identifier.calls).toBe(0);
     await app.close();
   });
+  it('item のフィールドが 32KB を超えたら 400 invalid_request。識別器を呼ばない', async () => {
+    const identifier = fakeIdentifier();
+    const app = buildApp({ config, detector: null, identifier, usageStore: new FileUsageStore(null) });
+    const res = await post(app, await checkerJpeg(), { item: itemJson + ' '.repeat(40 * 1024) }, install);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_request');
+    expect(identifier.calls).toBe(0);
+    await app.close();
+  });
+  it('item が各フィールドの上限を超えていたら 400 invalid_request', async () => {
+    const identifier = fakeIdentifier();
+    const app = buildApp({ config, detector: null, identifier, usageStore: new FileUsageStore(null) });
+    const big = { ...sampleItem, appearance: { ...sampleItem.appearance, visibleText: Array(31).fill('a') } };
+    const res = await post(app, await checkerJpeg(), { item: JSON.stringify(big) }, install);
+    expect(res.statusCode).toBe(400);
+    expect(identifier.calls).toBe(0);
+    await app.close();
+  });
   it('画像でないファイルは 400 invalid_image', async () => {
     const app = buildApp({ config, detector: null, identifier: fakeIdentifier(), usageStore: new FileUsageStore(null) });
     const res = await post(app, Buffer.from('not an image'), { item: itemJson }, install);

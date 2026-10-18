@@ -1,9 +1,11 @@
-import { BoxSchema, DEFAULT_CATEGORIES, type DetectedItem } from '@coordinate/shared';
+import { BoxSchema, DEFAULT_CATEGORIES, ITEM_LIMITS, type DetectedItem } from '@coordinate/shared';
 
 import type { RawItem, RawOutput } from './schema';
 
 const CATEGORY_IDS = new Set(DEFAULT_CATEGORIES.map((c) => c.id));
 const EPS = 1e-6;
+
+const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max) : s);
 
 const unit = (v: number) => Number.isFinite(v) && v >= 0 && v <= 1;
 
@@ -45,9 +47,16 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
   if (r.box.x + r.box.w > 1 + EPS || r.box.y + r.box.h > 1 + EPS) return null;
   if (!unit(r.detection_confidence) || !unit(r.category_confidence)) return null;
 
+  // 共有スキーマの上限に合わせて切り詰める(応答検証で落ちないように)。
+  const visibleText = r.visible_text.slice(0, ITEM_LIMITS.visibleTextCount).map((t) => clip(t, ITEM_LIMITS.visibleTextLength));
+  const colors = r.colors.slice(0, ITEM_LIMITS.colorsCount).map((c) => clip(c, ITEM_LIMITS.colorLength));
+
   const brandText = r.brand?.trim() ?? '';
-  // 信頼度が範囲外のブランドは採用しない(項目自体は残す)。
-  const evidence = brandText && unit(r.brand_confidence) ? findEvidence(brandText, r.visible_text) : null;
+  // 信頼度が範囲外・長すぎるブランドは採用しない(項目自体は残す)。
+  const evidence =
+    brandText && brandText.length <= ITEM_LIMITS.brandName && unit(r.brand_confidence)
+      ? findEvidence(brandText, visibleText)
+      : null;
   const brandScore = r.brand_confidence;
   const hasBrand = evidence !== null;
 
@@ -61,9 +70,9 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
       h: Math.min(r.box.h, 1 - r.box.y),
     },
     appearance: {
-      colors: r.colors,
-      visibleText: r.visible_text,
-      ...(r.notes ? { notes: r.notes } : {}),
+      colors,
+      visibleText,
+      ...(r.notes ? { notes: clip(r.notes, ITEM_LIMITS.freeText) } : {}),
     },
     brandCandidates: hasBrand ? [{ name: brandText, score: brandScore }] : [],
     candidates: [],
@@ -81,7 +90,7 @@ function toItem(r: RawItem, id: string, model: string): DetectedItem | null {
     rationale: hasBrand
       ? `写真内の文字「${evidence}」からブランド名を読み取りました`
       : 'ブランドを示す文字・ロゴが確認できませんでした',
-    modelVersion: model,
+    modelVersion: clip(model, ITEM_LIMITS.id),
   };
 }
 

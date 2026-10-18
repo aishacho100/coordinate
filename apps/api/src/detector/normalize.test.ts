@@ -1,3 +1,5 @@
+import { DetectedItemSchema } from '@coordinate/shared';
+
 import type { RawItem, RawOutput } from './schema';
 import { normalizeDetection } from './normalize';
 
@@ -119,5 +121,34 @@ describe('normalizeDetection', () => {
   it('ID は採用した項目に連番で振る', () => {
     const { items } = normalizeDetection(out([raw({ category_id: 'x' }), raw(), raw()]), 'm');
     expect(items.map((i) => i.id)).toEqual(['item_1', 'item_2']);
+  });
+  it('長すぎる・多すぎる値は共有スキーマの上限に切り詰め、応答検証を通す', () => {
+    const { items } = normalizeDetection(
+      out([
+        raw({
+          colors: Array(15).fill('a'.repeat(60)),
+          visible_text: ['NIKE', ...Array(40).fill('b'.repeat(300))],
+          notes: 'n'.repeat(900),
+          brand: 'Nike',
+          brand_confidence: 0.9,
+        }),
+      ]),
+      'm'.repeat(150),
+    );
+    const it0 = items[0]!;
+    expect(it0.appearance.colors).toHaveLength(10);
+    expect(it0.appearance.colors.every((c) => c.length === 40)).toBe(true);
+    expect(it0.appearance.visibleText).toHaveLength(30);
+    expect(it0.appearance.visibleText[1]).toHaveLength(200);
+    expect(it0.appearance.notes).toHaveLength(500);
+    expect(it0.modelVersion).toHaveLength(100);
+    expect(DetectedItemSchema.safeParse(it0).success).toBe(true);
+  });
+
+  it('上限を超える長さのブランド名は採用しない', () => {
+    const long = 'Nike ' + 'x'.repeat(120);
+    const { items } = normalizeDetection(out([raw({ visible_text: [long], brand: long, brand_confidence: 0.9 })]), 'm');
+    expect(items[0]?.brandCandidates).toEqual([]);
+    expect(DetectedItemSchema.safeParse(items[0]).success).toBe(true);
   });
 });
