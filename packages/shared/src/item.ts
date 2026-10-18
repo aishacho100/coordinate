@@ -72,6 +72,18 @@ export type IdentificationLevel = z.infer<typeof IdentificationLevelSchema>;
 
 export const PriceKindSchema = z.enum(['list', 'sale', 'market', 'estimated', 'manual']);
 
+/** 商品ページ・画像の URL は https のみ(http や javascript: は受け付けない)。 */
+const HttpsUrl = z
+  .string()
+  .url()
+  .refine((u) => {
+    try {
+      return new URL(u).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, 'https の URL のみ');
+
 export const ProductSchema = z.object({
   source: z.string().min(1),
   productId: z.string().min(1),
@@ -79,8 +91,8 @@ export const ProductSchema = z.object({
   name: z.string().min(1),
   modelNumber: z.string().optional(),
   color: z.string().optional(),
-  imageUrl: z.string().url().optional(),
-  pageUrl: z.string().url().optional(),
+  imageUrl: HttpsUrl.optional(),
+  pageUrl: HttpsUrl.optional(),
   /** 販売元(Google ショッピングの source など)。 */
   seller: z.string().optional(),
   price: z

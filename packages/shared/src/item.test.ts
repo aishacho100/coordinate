@@ -1,4 +1,4 @@
-import { DEFAULT_CATEGORIES, CategoryDefinitionSchema, DetectedItemSchema, BoxSchema } from './index';
+import { DEFAULT_CATEGORIES, CategoryDefinitionSchema, DetectedItemSchema, BoxSchema, ProductSchema } from './index';
 
 describe('shared schemas', () => {
   it('既定カテゴリはすべてスキーマに適合し、IDが重複しない', () => {
@@ -48,6 +48,16 @@ describe('shared schemas', () => {
       expect(ok({ ...base, id: 'a'.repeat(101) })).toBe(false);
       expect(ok({ ...base, categoryId: 'a'.repeat(101) })).toBe(false);
       expect(ok({ ...base, modelVersion: 'a'.repeat(101) })).toBe(false);
+    });
+  });
+
+  describe('Product の URL は https のみ', () => {
+    const p = { source: 's', productId: 'p', brand: '', name: 'n', fetchedAt: '2026-10-18T00:00:00.000Z' };
+    it('http や javascript: を拒否する', () => {
+      expect(ProductSchema.safeParse({ ...p, pageUrl: 'https://example.com/a', imageUrl: 'https://example.com/a.jpg' }).success).toBe(true);
+      expect(ProductSchema.safeParse({ ...p, pageUrl: 'http://example.com/a' }).success).toBe(false);
+      expect(ProductSchema.safeParse({ ...p, pageUrl: 'javascript:alert(1)' }).success).toBe(false);
+      expect(ProductSchema.safeParse({ ...p, imageUrl: 'http://example.com/a.jpg' }).success).toBe(false);
     });
   });
 });

@@ -68,6 +68,13 @@ describe('SerpApiSearcher', () => {
     expect(store.monthly(NOW).serpapi).toBe(1);
   });
 
+  it('https 以外の product_link は pageUrl を空にする', async () => {
+    const { s } = make(okFetch([row({ product_link: 'http://www.google.com/x' }), row({ product_id: '2', product_link: 'javascript:alert(1)' })]));
+    const r = await s.search('q');
+    expect(r.products).toHaveLength(2);
+    expect(r.products.every((p) => p.pageUrl === undefined)).toBe(true);
+  });
+
   it('価格が取れない行は price を空にする(推測しない)', async () => {
     const { s } = make(okFetch([row({ price: undefined, extracted_price: undefined })]));
     expect((await s.search('q')).products[0]?.price).toBeUndefined();

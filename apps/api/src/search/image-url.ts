@@ -12,3 +12,12 @@ export function isAllowedImageUrl(raw: string): boolean {
   if (u.port !== '' || u.username !== '' || u.password !== '') return false;
   return u.protocol === 'https:' && HOSTS.some((re) => re.test(u.hostname));
 }
+
+/** 商品ページの URL として使えるか(https のみ)。http や javascript: は使わない。 */
+export function isHttpsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}

@@ -4,7 +4,7 @@ import type { Product } from '@coordinate/shared';
 
 import type { TtlCache } from '../cache/ttl-cache';
 import type { UsageStore } from '../usage/usage-store';
-import { isAllowedImageUrl } from './image-url';
+import { isAllowedImageUrl, isHttpsUrl } from './image-url';
 import type { FetchLike, ProductSearcher, SearchOutcome } from './types';
 
 const ENDPOINT = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701';
@@ -80,7 +80,7 @@ export class RakutenSearcher implements ProductSearcher {
       if (!r.success) continue;
       const it = r.data.Item;
       const image = it.mediumImageUrls?.[0]?.imageUrl;
-      const pageUrl = it.affiliateUrl || it.itemUrl;
+      const pageUrl = [it.affiliateUrl, it.itemUrl].find((u): u is string => !!u && isHttpsUrl(u));
       products.push({
         source: 'rakuten',
         productId: it.itemCode,

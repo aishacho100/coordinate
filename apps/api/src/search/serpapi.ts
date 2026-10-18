@@ -4,7 +4,7 @@ import type { Product } from '@coordinate/shared';
 
 import type { TtlCache } from '../cache/ttl-cache';
 import type { UsageStore } from '../usage/usage-store';
-import { isAllowedImageUrl } from './image-url';
+import { isAllowedImageUrl, isHttpsUrl } from './image-url';
 import type { FetchLike, ProductSearcher, SearchOutcome } from './types';
 
 const Row = z.object({
@@ -92,7 +92,7 @@ export class SerpApiSearcher implements ProductSearcher {
         brand: '',
         name: row.title,
         ...(row.thumbnail && isAllowedImageUrl(row.thumbnail) ? { imageUrl: row.thumbnail } : {}),
-        ...(row.product_link ? { pageUrl: row.product_link } : {}),
+        ...(row.product_link && isHttpsUrl(row.product_link) ? { pageUrl: row.product_link } : {}),
         ...(row.extracted_price !== undefined
           ? { price: { amount: row.extracted_price, currency: 'JPY', kind: 'market' as const, fetchedAt } }
           : {}),

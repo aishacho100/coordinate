@@ -73,6 +73,15 @@ describe('RakutenSearcher', () => {
     expect(r.products[0]?.pageUrl).toBe(aff);
     expect(r.products[1]?.pageUrl).toBe(plain);
   });
+  it('https 以外の URL は pageUrl に使わない(affiliateUrl が http なら itemUrl、両方だめなら空)', async () => {
+    const f = okFetch([
+      item({ itemCode: 'a:1', itemUrl: 'https://item.rakuten.co.jp/a/1/', affiliateUrl: 'http://hb.afl.rakuten.co.jp/x' }),
+      item({ itemCode: 'a:2', itemUrl: 'http://item.rakuten.co.jp/a/2/', affiliateUrl: 'javascript:alert(1)' }),
+    ]);
+    const r = await make(f).search('q');
+    expect(r.products[0]?.pageUrl).toBe('https://item.rakuten.co.jp/a/1/');
+    expect(r.products[1]?.pageUrl).toBeUndefined();
+  });
   it('affiliateId が無ければクエリに付けない', async () => {
     const f = okFetch([]);
     await make(f, { applicationId: 'APP', accessKey: 'AK', affiliateId: null }).search('q');
