@@ -119,13 +119,45 @@ describe('ProductCandidates', () => {
     expect(screen.queryByRole('link', { name: '楽天市場で見る' })).toBeNull();
   });
 
-  it('楽天の検索が ok のときだけクレジットを出し、押すと開く', () => {
+  it('Google Lens の候補は「{販売元}で見る」、販売元が無ければ「商品ページを見る」', () => {
+    const lens: IdentifyCandidate = {
+      ...google,
+      product: { ...google.product, source: 'google_lens', productId: 'l1', seller: 'ZOZOTOWN' },
+    };
+    const lensNoSeller: IdentifyCandidate = {
+      ...lens,
+      product: { ...lens.product, productId: 'l2', seller: undefined },
+    };
+    render(<ProductCandidates response={response({ candidates: [lens, lensNoSeller] })} />);
+    fireEvent.press(screen.getByRole('link', { name: 'ZOZOTOWNで見る' }));
+    expect(openURL).toHaveBeenCalledWith(lens.product.pageUrl);
+    expect(screen.getByRole('link', { name: '商品ページを見る' })).toBeTruthy();
+  });
+
+  it('楽天の候補を表示しているときだけクレジットを出し、押すと開く', () => {
     const { unmount } = render(<ProductCandidates response={response()} />);
     fireEvent.press(screen.getByRole('link', { name: 'Supported by Rakuten Developers' }));
     expect(openURL).toHaveBeenCalledWith('https://developers.rakuten.com');
     unmount();
-    render(<ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'failed', lens: 'ok' } })} />);
+    // 楽天の検索が ok でも、楽天の候補が無ければ出さない(Lens だけで足りた場合)。
+    const lens: IdentifyCandidate = { ...google, product: { ...google.product, source: 'google_lens', productId: 'l1' } };
+    render(<ProductCandidates response={response({ candidates: [lens, google] })} />);
     expect(screen.queryByText('Supported by Rakuten Developers')).toBeNull();
+  });
+
+  it('Lens だけで足りて呼び出し 0 回の検索(ok)は、何も出さない', () => {
+    const lens: IdentifyCandidate = { ...google, product: { ...google.product, source: 'google_lens', productId: 'l1' } };
+    render(
+      <ProductCandidates
+        response={response({
+          candidates: [lens],
+          searches: { serpapi: 'ok', rakuten: 'ok', lens: 'ok' },
+          usage: { claude: { inputTokens: 1, outputTokens: 1 }, serpapiSearches: 0, rakutenCalls: 0, lensSearches: 1 },
+        })}
+      />,
+    );
+    expect(screen.queryByText(/検索は/)).toBeNull();
+    expect(screen.queryByText(/Rakuten/)).toBeNull();
   });
 
   it('使えなかった検索は理由を一行で出す', () => {
@@ -143,7 +175,7 @@ describe('ProductCandidates', () => {
     const { unmount } = render(
       <ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'ok', lens: 'not_consented' } })} />,
     );
-    expect(screen.getByText('画像検索には同意が必要です。')).toBeTruthy();
+    expect(screen.getByText('画像検索は使っていません(同意が必要です)。')).toBeTruthy();
     unmount();
     render(<ProductCandidates response={response({ searches: { serpapi: 'ok', rakuten: 'ok', lens: 'failed' } })} />);
     expect(screen.getByText('画像検索は失敗しました。')).toBeTruthy();

@@ -40,11 +40,13 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
     .filter((k) => response.searches[k] !== 'ok')
     .map((k) => {
       const status = response.searches[k] as Exclude<SearchStatus, 'ok'>;
-      // 「画像検索は同意が必要です」ではなく「画像検索には同意が必要です」と読ませる。
-      if (k === 'lens' && status === 'not_consented') return '画像検索には同意が必要です。';
+      if (k === 'lens' && status === 'not_consented') return '画像検索は使っていません(同意が必要です)。';
       return `${SEARCH_SUBJECT[k]}${SEARCH_REASON[status]}。`;
     });
   const subtext = SUBTEXT[response.verdict];
+  // 楽天の結果を表示しているときだけ出す(Lens だけで足りて楽天を使っていないときは出さない)。
+  const showRakutenCredit =
+    response.verdict !== 'unidentified' && response.candidates.some((c) => c.product.source === 'rakuten');
 
   return (
     <View style={[styles.wrap, { borderColor: theme.border }]}>
@@ -70,7 +72,7 @@ export function ProductCandidates({ response }: { response: IdentifyResponse }) 
         </ThemedText>
       ) : null}
 
-      {response.searches.rakuten === 'ok' ? (
+      {showRakutenCredit ? (
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Supported by Rakuten Developers"
@@ -98,7 +100,11 @@ function Candidate({ candidate }: { candidate: IdentifyCandidate }) {
       ? `Google ショッピングで見る${product.seller ? `(販売元: ${product.seller})` : ''}`
       : product.source === 'rakuten'
         ? '楽天市場で見る'
-        : null;
+        : product.source === 'google_lens'
+          ? product.seller
+            ? `${product.seller}で見る`
+            : '商品ページを見る'
+          : null;
 
   return (
     <View style={[styles.candidate, { borderColor: theme.border }]}>
