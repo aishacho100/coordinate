@@ -56,7 +56,7 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
     const header = req.headers['x-install-id'];
     const installId = typeof header === 'string' && INSTALL_ID.test(header) ? header : null;
     const { identifyPerInstallPerDay, identifyPerIpPerDay } = deps.config.limits;
-    // 記録の失敗(ディスクなど)で結果を妨げない。種類だけログに残す。
+    // 月間の加算の失敗(ディスクなど)で結果を妨げない。種類だけログに残す。
     const safely = <T>(label: string, fn: () => T, fallback: T): T => {
       try {
         return fn();
@@ -65,13 +65,17 @@ export function registerIdentifyRoute(app: FastifyInstance, deps: AppDeps) {
         return fallback;
       }
     };
-    if (
-      !safely('daily limit (ip) failed', () => store.tryConsumeDaily(now, 'ip', req.ip, identifyPerIpPerDay), true) ||
-      (installId &&
-        !safely('daily limit (install) failed', () => store.tryConsumeDaily(now, 'install', installId, identifyPerInstallPerDay), true))
-    ) {
-      return sendError(reply, 429, 'quota_exceeded');
+    // 日次の上限は費用の歯止めなので、記録できないときは通さずに止める(識別器を呼ばない)。
+    let allowed: boolean;
+    try {
+      allowed =
+        store.tryConsumeDaily(now, 'ip', req.ip, identifyPerIpPerDay) &&
+        (!installId || store.tryConsumeDaily(now, 'install', installId, identifyPerInstallPerDay));
+    } catch (e) {
+      req.log.error({ errorName: e instanceof Error ? e.name : 'unknown' }, 'daily limit failed');
+      return sendError(reply, 503, 'identify_failed');
     }
+    if (!allowed) return sendError(reply, 429, 'quota_exceeded');
 
     let image: DetectorImage;
     try {

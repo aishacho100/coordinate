@@ -119,16 +119,31 @@ describe('POST /v1/identify', () => {
     expect(store.monthly(new Date())).toMatchObject({ claudeInput: 5, claudeOutput: 3 });
     await app.close();
   });
-  it('月間の計上や日次の上限の記録が例外を投げても、結果の返却を妨げない', async () => {
+  it('日次の上限の記録が例外を投げたら、上限を確認できないので 503 identify_failed。識別器を呼ばない', async () => {
+    const real = new FileUsageStore(null);
+    const broken = {
+      monthly: real.monthly.bind(real),
+      addMonthly: real.addMonthly.bind(real),
+      tryConsumeDaily: () => {
+        throw new Error('disk full');
+      },
+    } as unknown as FileUsageStore;
+    const identifier = fakeIdentifier();
+    const app = buildApp({ config, detector: null, identifier, usageStore: broken });
+    const res = await post(app, await checkerJpeg(), { item: itemJson }, install);
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error).toBe('identify_failed');
+    expect(identifier.calls).toBe(0);
+    await app.close();
+  });
+  it('月間の計上が例外を投げても、結果の返却を妨げない', async () => {
     const real = new FileUsageStore(null);
     const broken = {
       monthly: real.monthly.bind(real),
       addMonthly: () => {
         throw new Error('disk full');
       },
-      tryConsumeDaily: () => {
-        throw new Error('disk full');
-      },
+      tryConsumeDaily: real.tryConsumeDaily.bind(real),
     } as unknown as FileUsageStore;
     const identifier = fakeIdentifier(async (opts) => {
       opts.onUsage?.({ inputTokens: 5, outputTokens: 3 });
