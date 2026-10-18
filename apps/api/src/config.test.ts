@@ -43,3 +43,48 @@ describe('loadConfig', () => {
     expect(c.pricing).toBeNull(); // 片方だけでは概算しない
   });
 });
+
+describe('loadConfig: 商品検索', () => {
+  it('未設定なら検索は使えず、上限は既定値', () => {
+    const c = loadConfig({});
+    expect(c.serpapiKey).toBeNull();
+    expect(c.rakuten).toBeNull();
+    expect(c.limits).toEqual({
+      searchesPerProviderPerItem: 2,
+      cacheTtlMs: 3_600_000,
+      identifyPerInstallPerDay: 30,
+      identifyPerIpPerDay: 90,
+      serpapiMonthly: 200,
+      searchTimeoutMs: 15_000,
+    });
+    expect(c.serpapiCostPerSearchUsd).toBeNull();
+    expect(c.usageFile).toBe('data/usage.json');
+  });
+  it('楽天は applicationId と accessKey がそろったときだけ有効(affiliateId は任意)', () => {
+    expect(loadConfig({ RAKUTEN_APPLICATION_ID: 'a' }).rakuten).toBeNull();
+    expect(loadConfig({ RAKUTEN_APPLICATION_ID: 'a', RAKUTEN_ACCESS_KEY: 'k' }).rakuten).toEqual({
+      applicationId: 'a',
+      accessKey: 'k',
+      affiliateId: null,
+    });
+    expect(
+      loadConfig({ RAKUTEN_APPLICATION_ID: 'a', RAKUTEN_ACCESS_KEY: 'k', RAKUTEN_AFFILIATE_ID: 'x' }).rakuten
+        ?.affiliateId,
+    ).toBe('x');
+  });
+  it('数値の設定を読む。不正な値は既定値に戻す', () => {
+    const c = loadConfig({
+      SERPAPI_API_KEY: 's',
+      SERPAPI_MONTHLY_LIMIT: '100',
+      SEARCH_CACHE_TTL_SECONDS: '60',
+      SERPAPI_COST_PER_SEARCH_USD: '0.025',
+      IDENTIFY_DAILY_LIMIT: 'abc',
+    });
+    expect(c.serpapiKey).toBe('s');
+    expect(c.limits.serpapiMonthly).toBe(100);
+    expect(c.limits.cacheTtlMs).toBe(60_000);
+    expect(c.serpapiCostPerSearchUsd).toBe(0.025);
+    expect(c.limits.identifyPerInstallPerDay).toBe(30);
+    expect(c.limits.identifyPerIpPerDay).toBe(90);
+  });
+});

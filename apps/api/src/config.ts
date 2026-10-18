@@ -10,6 +10,22 @@ export type Config = {
   ratePerMinute: number;
   /** 費用概算用。両方そろった場合のみ。 */
   pricing: { inputPerMTok: number; outputPerMTok: number } | null;
+  serpapiKey: string | null;
+  /** applicationId と accessKey がそろったときだけ非 null。affiliateId が無ければ収益化されない。 */
+  rakuten: { applicationId: string; accessKey: string; affiliateId: string | null } | null;
+  limits: {
+    /** 1 アイテムの特定で、1 つの検索元に投げる検索の最大回数。 */
+    searchesPerProviderPerItem: number;
+    cacheTtlMs: number;
+    identifyPerInstallPerDay: number;
+    identifyPerIpPerDay: number;
+    serpapiMonthly: number;
+    searchTimeoutMs: number;
+  };
+  /** SerpApi 1 検索あたりの概算 USD(プランの月額 ÷ 検索数)。未設定なら費用に含めない。 */
+  serpapiCostPerSearchUsd: number | null;
+  /** 使用量(数値のみ)の保存先 JSON ファイル。 */
+  usageFile: string;
 };
 
 const EFFORTS: readonly Effort[] = ['low', 'medium', 'high'];
@@ -25,6 +41,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const effort = EFFORTS.find((e) => e === env.ANTHROPIC_EFFORT) ?? 'medium';
   const priceIn = positiveNumber(env.PRICE_INPUT_PER_MTOK);
   const priceOut = positiveNumber(env.PRICE_OUTPUT_PER_MTOK);
+  const nonEmpty = (v: string | undefined) => (v?.trim() ? v.trim() : null);
+  const rakutenId = nonEmpty(env.RAKUTEN_APPLICATION_ID);
+  const rakutenKey = nonEmpty(env.RAKUTEN_ACCESS_KEY);
+  const perInstall = positiveNumber(env.IDENTIFY_DAILY_LIMIT) ?? 30;
   return {
     port: positiveNumber(env.PORT) ?? 8787,
     anthropicApiKey: key ? key : null,
@@ -33,5 +53,20 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxImageBytes: 10 * 1024 * 1024,
     ratePerMinute: positiveNumber(env.RATE_LIMIT_PER_MINUTE) ?? 20,
     pricing: priceIn !== null && priceOut !== null ? { inputPerMTok: priceIn, outputPerMTok: priceOut } : null,
+    serpapiKey: nonEmpty(env.SERPAPI_API_KEY),
+    rakuten:
+      rakutenId && rakutenKey
+        ? { applicationId: rakutenId, accessKey: rakutenKey, affiliateId: nonEmpty(env.RAKUTEN_AFFILIATE_ID) }
+        : null,
+    limits: {
+      searchesPerProviderPerItem: 2,
+      cacheTtlMs: (positiveNumber(env.SEARCH_CACHE_TTL_SECONDS) ?? 3600) * 1000,
+      identifyPerInstallPerDay: perInstall,
+      identifyPerIpPerDay: perInstall * 3,
+      serpapiMonthly: positiveNumber(env.SERPAPI_MONTHLY_LIMIT) ?? 200,
+      searchTimeoutMs: 15_000,
+    },
+    serpapiCostPerSearchUsd: positiveNumber(env.SERPAPI_COST_PER_SEARCH_USD),
+    usageFile: nonEmpty(env.USAGE_FILE) ?? 'data/usage.json',
   };
 }
