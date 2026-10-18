@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { Alert } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AnalyzingScreen from '@/app/analyzing';
 import EditorScreen from '@/app/editor';
@@ -67,10 +68,16 @@ jest.mock('@/lib/image-search-consent', () => ({
   },
 }));
 
+const safeMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
 const withProvider = (ui: ReactElement) => (
-  <EditorProvider>
-    <AnalysisProvider>{ui}</AnalysisProvider>
-  </EditorProvider>
+  <SafeAreaProvider initialMetrics={safeMetrics}>
+    <EditorProvider>
+      <AnalysisProvider>{ui}</AnalysisProvider>
+    </EditorProvider>
+  </SafeAreaProvider>
 );
 
 const loadedEditor = editorReducer(initialEditorState, {
@@ -91,10 +98,17 @@ beforeEach(() => {
 describe('ホーム', () => {
   it('写真を選ぶボタンがあり、未実装の注意書きは出さない', () => {
     render(withProvider(<HomeScreen />));
-    expect(screen.getByText(/1枚選ぶだけ/)).toBeTruthy();
+    expect(screen.queryByText(/1枚選ぶだけ/)).toBeNull();
+    expect(screen.getByLabelText('設定')).toBeTruthy();
     expect(screen.getByLabelText('写真を選ぶ')).toBeTruthy();
     expect(screen.queryByText(/未実装/)).toBeNull();
     expect(screen.queryByLabelText('編集を続ける')).toBeNull();
+  });
+
+  it('設定アイコンから設定画面へ進む', () => {
+    render(withProvider(<HomeScreen />));
+    fireEvent.press(screen.getByLabelText('設定'));
+    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 
   it('写真を選ぶと AI 解析画面へ遷移する', async () => {
@@ -537,7 +551,7 @@ describe('AI解析画面', () => {
   it('表示と同時に解析を始め、成功したら結果画面へ進む', async () => {
     mockAnalyzePhoto.mockResolvedValue(response);
     render(withPhoto(<AnalyzingScreen />));
-    expect(screen.getByText('解析しています')).toBeTruthy();
+    expect(screen.getByLabelText('解析しています')).toBeTruthy();
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/result'));
     expect(mockAnalyzePhoto).toHaveBeenCalledWith('file:///a.jpg');
   });

@@ -13,7 +13,7 @@ type Props = {
   disabled?: boolean;
 };
 
-/** 幅を絞った中央配置のボタン。主要操作は塗り、副次操作は細い線。 */
+/** 幅を絞った中央配置のボタン(文字を残す所だけで使う)。主要操作は金の塗り、副次操作は細い線。 */
 export function AppButton({ label, accessibilityLabel, onPress, variant = 'primary', disabled = false }: Props) {
   const theme = useTheme();
   const primary = variant === 'primary';
@@ -27,14 +27,14 @@ export function AppButton({ label, accessibilityLabel, onPress, variant = 'prima
       style={({ pressed }) => [
         styles.base,
         primary
-          ? { backgroundColor: theme.text, borderColor: theme.text }
+          ? { backgroundColor: theme.accent, borderColor: theme.accent }
           : { backgroundColor: 'transparent', borderColor: theme.border },
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}>
       <ThemedText
         type="smallBold"
-        style={[styles.label, { color: primary ? theme.background : theme.text }]}>
+        style={[styles.label, { color: primary ? '#0F0E0D' : theme.text }]}>
         {label}
       </ThemedText>
     </Pressable>

@@ -9,12 +9,11 @@ import {
   ZenKakuGothicNew_700Bold,
 } from '@expo-google-fonts/zen-kaku-gothic-new';
 import { KleeOne_600SemiBold } from '@expo-google-fonts/klee-one';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors, Fonts } from '@/constants/theme';
@@ -24,8 +23,7 @@ import { EditorProvider } from '@/features/editor/editor-context';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const colors = Colors[scheme];
+  const colors = Colors;
 
   const [fontsLoaded, fontError] = useFonts({
     ShipporiMincho_500Medium,
@@ -45,7 +43,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
-  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  const base = DarkTheme;
   const navTheme = {
     ...base,
     colors: {
@@ -62,7 +60,7 @@ export default function RootLayout() {
       <EditorProvider>
         <AnalysisProvider>
         <ThemeProvider value={navTheme}>
-          <StatusBar style="auto" />
+          <StatusBar style="light" />
           <Stack
             screenOptions={{
               headerShadowVisible: false,
@@ -72,7 +70,7 @@ export default function RootLayout() {
               headerTintColor: colors.text,
               contentStyle: { backgroundColor: colors.background },
             }}>
-            <Stack.Screen name="index" options={{ title: 'COORDINATE' }} />
+            <Stack.Screen name="index" options={{ title: 'COORDINATE', headerShown: false }} />
             <Stack.Screen name="analyzing" options={{ title: 'AI解析中' }} />
             <Stack.Screen name="result" options={{ title: '認識結果' }} />
             <Stack.Screen name="editor" options={{ title: '画像編集' }} />
