@@ -210,6 +210,106 @@ describe('Identifier', () => {
     const r = await make({ serpapi: searcher([ok([])]), rakuten: searcher([ok([dup, dup])]) }).identify(img, sampleItem);
     expect(r.candidates).toHaveLength(1);
   });
+  describe('全体の締め切り', () => {
+    const DEADLINE = 100_000;
+    /** 偽の時計。advance で進める。 */
+    const clock = () => {
+      const c = { t: 0, advance: (ms: number) => void (c.t += ms), now: () => c.t };
+      return c;
+    };
+    const advancing = (c: ReturnType<typeof clock>, ms: number, outcomes: SearchOutcome[]) => {
+      const s = searcher(outcomes);
+      const inner = s.search.bind(s);
+      s.search = async (q: string) => (c.advance(ms), inner(q));
+      return s;
+    };
+    const lensOne = (c: ReturnType<typeof clock>, ms: number) => ({
+      searchByImage: async () => {
+        c.advance(ms);
+        return ok([{ ...product('a', 'google_lens', 'https://encrypted-tbn0.gstatic.com/a.jpg'), pageUrl: 'https://shop.example/a' }], 2);
+      },
+    });
+
+    it('テキスト検索の前に経過が締め切りの 70% を超えていたら、テキスト検索を行わず failed(deadline) にする', async () => {
+      const c = clock();
+      const serp = searcher([ok([product('g1', 'google_shopping')])]);
+      const rak = searcher([ok([product('r1')])]);
+      const seen: string[] = [];
+      const r = await make({ lens: lensOne(c, 70_001), serpapi: serp, rakuten: rak, nowMs: c.now, deadlineMs: DEADLINE }).identify(
+        img,
+        sampleItem,
+        { consent: true, onSearchFailure: (p, d) => seen.push(`${p}:${d}`) },
+      );
+      expect(serp.queries).toHaveLength(0);
+      expect(rak.queries).toHaveLength(0);
+      expect(r.searches).toEqual({ serpapi: 'failed', rakuten: 'failed', lens: 'ok' });
+      expect(seen).toEqual(['serpapi:deadline', 'rakuten:deadline']);
+      expect(r.candidates).toHaveLength(1);
+      expect(r.usage).toMatchObject({ serpapiSearches: 0, rakutenCalls: 0 });
+    });
+
+    it('ちょうど 70% ならテキスト検索を行う', async () => {
+      const c = clock();
+      const serp = searcher([ok([])]);
+      await make({ lens: lensOne(c, 70_000), serpapi: serp, nowMs: c.now, deadlineMs: DEADLINE }).identify(img, sampleItem, { consent: true });
+      expect(serp.queries.length).toBeGreaterThan(0);
+    });
+
+    it('テキスト検索を行えず Lens も使えなければ SearchUnavailableError', async () => {
+      const c = clock();
+      const gen = { generate: async () => (c.advance(75_000), { queries: ['q1'], usage: usage(1, 1) }) };
+      await expect(make({ queryGenerator: gen, nowMs: c.now, deadlineMs: DEADLINE }).identify(img, sampleItem)).rejects.toThrow(
+        'SearchUnavailableError',
+      );
+    });
+
+    it('照合の前に締め切りを超えていたら、照合を省き、候補を「未照合」の B・low で返す', async () => {
+      const c = clock();
+      let called = false;
+      const brandItem: DetectedItem = {
+        ...sampleItem,
+        appearance: { ...sampleItem.appearance, visibleText: ['NIKE'] },
+        brandCandidates: [{ name: 'Nike', score: 0.9 }],
+      };
+      const r = await make({
+        serpapi: advancing(c, 101_000, [ok([product('g1', 'google_shopping')])]),
+        comparer: { compare: async () => ((called = true), { judgements: [], usage: usage(1, 1) }) },
+        nowMs: c.now,
+        deadlineMs: DEADLINE,
+      }).identify(img, brandItem);
+      expect(called).toBe(false);
+      expect(r.comparison).toBe('skipped');
+      expect(r.verdict).toBe('candidates');
+      expect(r.level).toBe('low');
+      expect(r.candidates.length).toBeGreaterThan(0);
+      for (const cand of r.candidates) {
+        expect(cand.matchScore).toBe(0);
+        expect(cand.unconfirmed).toEqual(['時間がかかったため、画像との照合を省きました']);
+      }
+      expect(r.usage.claude).toEqual(usage(80, 20));
+    });
+
+    it('締め切り内なら照合を行い、残り時間を timeoutMs として渡す', async () => {
+      const c = clock();
+      let opts: { timeoutMs?: number } | undefined;
+      const r = await make({
+        serpapi: advancing(c, 40_000, [ok([product('g1', 'google_shopping')])]),
+        comparer: {
+          compare: async (_i, cands, o) => {
+            opts = o;
+            return { judgements: cands.map((_, index) => ({ index, sameProduct: false, nameMatchesFeatures: false, similarity: 0.5, matched: [], unconfirmed: [] })), usage: usage(1, 1) };
+          },
+        },
+        nowMs: c.now,
+        deadlineMs: DEADLINE,
+      }).identify(img, sampleItem);
+      expect(r.comparison).toBe('done');
+      // serpapi と rakuten はそれぞれ最大 2 回呼ぶが、advance は serpapi の呼び出し回数 x 40 秒。残りは 100 秒から引く。
+      expect(opts?.timeoutMs).toBeGreaterThan(0);
+      expect(opts?.timeoutMs).toBeLessThanOrEqual(DEADLINE);
+      expect(opts?.timeoutMs).toBe(DEADLINE - c.t);
+    });
+  });
   describe('Lens(画像検索)', () => {
     const lensProduct = (n: string, over: Partial<Product> = {}): Product => ({
       ...product(n, 'google_lens', `https://encrypted-tbn0.gstatic.com/${n}.jpg`),

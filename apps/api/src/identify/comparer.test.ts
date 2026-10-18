@@ -138,4 +138,15 @@ describe('Comparer', () => {
     expect(out.judgements).toEqual([]);
     expect(c.calls).toHaveLength(0);
   });
+  it('timeoutMs を渡されたら、Claude の呼び出しオプション(timeout)に使う。無ければオプションなし', async () => {
+    const seen: unknown[] = [];
+    const c = {
+      messages: {
+        create: async (_x: unknown, o?: unknown) => (seen.push(o), reply({ results: [row(0)] })),
+      },
+    } as unknown as MessagesClient;
+    await new Comparer(c, 'm', 'low').compare(img, [p('a')], { timeoutMs: 12_345 });
+    await new Comparer(c, 'm', 'low').compare(img, [p('a')]);
+    expect(seen).toEqual([{ timeout: 12_345 }, undefined]);
+  });
 });

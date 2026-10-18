@@ -90,7 +90,12 @@ export class Comparer {
     private readonly fetchImage: ImageFetcher,
   ) {}
 
-  async compare(image: DetectorImage, candidates: Product[]): Promise<{ judgements: Judgement[]; usage: Usage }> {
+  async compare(
+    image: DetectorImage,
+    candidates: Product[],
+    /** timeoutMs: 全体の締め切りまでの残り時間。Claude の呼び出しをこれ以上待たない。 */
+    opts: { timeoutMs?: number } = {},
+  ): Promise<{ judgements: Judgement[]; usage: Usage }> {
     if (candidates.length === 0) return { judgements: [], usage: { inputTokens: 0, outputTokens: 0 } };
 
     const images = await mapLimit(candidates, FETCH_CONCURRENCY, async (c) => {
@@ -126,13 +131,16 @@ export class Comparer {
       }
     });
 
-    const res = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 2048,
-      system: SYSTEM,
-      output_config: { effort: this.effort, format: { type: 'json_schema', schema: SCHEMA } },
-      messages: [{ role: 'user', content }],
-    });
+    const res = await this.client.messages.create(
+      {
+        model: this.model,
+        max_tokens: 2048,
+        system: SYSTEM,
+        output_config: { effort: this.effort, format: { type: 'json_schema', schema: SCHEMA } },
+        messages: [{ role: 'user', content }],
+      },
+      opts.timeoutMs !== undefined ? { timeout: opts.timeoutMs } : undefined,
+    );
     const usage: Usage = { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
     if (res.stop_reason === 'refusal') throw new ComparisonError('refusal', usage);
     if (res.stop_reason === 'max_tokens') throw new ComparisonError('truncated', usage);

@@ -59,9 +59,17 @@ describe('loadConfig: 商品検索', () => {
       searchTimeoutMs: 15_000,
       lensUploadTimeoutMs: 15_000,
       lensSearchTimeoutMs: 45_000,
+      identifyDeadlineMs: 100_000,
     });
     expect(c.serpapiCostPerSearchUsd).toBeNull();
     expect(c.usageFile).toBe('data/usage.json');
+  });
+  it('IDENTIFY_DEADLINE_SECONDS は正の数のみ。上限は 150 秒、不正なら既定の 100 秒', () => {
+    expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: '90' }).limits.identifyDeadlineMs).toBe(90_000);
+    expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: '999' }).limits.identifyDeadlineMs).toBe(150_000);
+    for (const bad of ['0', '-5', 'abc', '']) {
+      expect(loadConfig({ IDENTIFY_DEADLINE_SECONDS: bad }).limits.identifyDeadlineMs).toBe(100_000);
+    }
   });
   it('SERPAPI_API_KEY があれば lensEnabled が true になる', () => {
     expect(loadConfig({ SERPAPI_API_KEY: 's' }).lensEnabled).toBe(true);

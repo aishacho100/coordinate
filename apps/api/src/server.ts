@@ -65,6 +65,7 @@ const identifier = anthropic
         hits: 10,
       }),
       maxSearchesPerProvider: config.limits.searchesPerProviderPerItem,
+      deadlineMs: config.limits.identifyDeadlineMs,
       pricing: config.pricing,
       serpapiCostPerSearchUsd: config.serpapiCostPerSearchUsd,
     })
