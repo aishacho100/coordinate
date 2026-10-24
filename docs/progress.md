@@ -135,7 +135,8 @@ npm start -w api          # http://localhost:8787 。/health で確認
 
 ## 次にやること(再開時)
 
-1. 未 push: main(Phase 4 + UI 刷新)と coordinate-site の privacy.html(a9a69f4)。push・公開は、ユーザーに確認してから(プライバシーポリシーはアプリ配布の直前に内容を確認して公開する方針)。
+1. リポジトリは 2026-10-20 に hanarikishi から aishacho100 へ移行済み(`https://github.com/aishacho100/coordinate`、public)。main(Phase 4 + UI 刷新)は push 済み。未 push: coordinate-site の privacy.html(a9a69f4)。push・公開は、ユーザーに確認してから(プライバシーポリシーはアプリ配布の直前に内容を確認して公開する方針)。
+1a. 楽天アフィリエイトに登録している URL を、新しいものに変更する(ユーザー作業)。旧アカウント(hanarikishi)由来の URL を登録している場合は、aishacho100 側に合わせる。coordinate-site の公開先 URL も、旧アカウントのままなら移行して合わせる。
 2. 公開前の必須: ホーム背景(`apps/mobile/assets/images/home-bg.jpg`)は仮の Unsplash 写真。自前の写真か AI 生成に差し替える(モデルの権利)。アプリ名は「Coordinate」のまま保留。
 3. 未確認: 商品リンクのタップ、楽天リンク、C(特定できず)の画面、画像検索を断った場合、実機、SerpApi Image API の課金・保持期間、SerpApi の商用利用規約、楽天の QPS・手数料。
 4. 改善候補: 候補カードの文字を更に減らす、ラベルの商品名の短縮の精度、評価データを増やして A の正解率を測る。
